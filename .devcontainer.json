@@ -7,5 +7,5 @@
           ]
       }
   },
-  "initializeCommand": "npm install -g pnpm && pnpm install && pnpm run build"
+  "initializeCommand": "npm install -g pnpm && pnpm install"
 }
