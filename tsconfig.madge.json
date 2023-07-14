@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "baseUrl": ".",
+    "paths": {
+      "@mattiamanzati/effect-es": ["./build/esm/index.js"],
+      "@mattiamanzati/effect-es/*": ["./build/esm/*"]
+    }
+  },
+  "include": ["./build/esm/**/*.js"]
+}

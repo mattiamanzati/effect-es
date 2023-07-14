@@ -1,0 +1,28 @@
+{
+  "exclude": ["src/internal/**/*.ts"],
+  "theme": "mikearnaldi/just-the-docs",
+  "parseCompilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "paths": {
+      "@mattiamanzati/effect-es": ["./src/index.ts"],
+      "@mattiamanzati/effect-es/test/*": ["./test/*"],
+      "@mattiamanzati/effect-es/examples/*": ["./examples/*"],
+      "@mattiamanzati/effect-es/*": ["./src/*"]
+    }
+  },
+  "examplesCompilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "paths": {
+      "@mattiamanzati/effect-es": ["../../src/index.ts"],
+      "@mattiamanzati/effect-es/test/*": ["../../test/*"],
+      "@mattiamanzati/effect-es/examples/*": ["../../examples/*"],
+      "@mattiamanzati/effect-es/*": ["../../src/*"]
+    }
+  }
+}
