@@ -16,6 +16,8 @@ import * as ShardingConfig from "@effect/shardcake/ShardingConfig"
 import * as ShardingImpl from "@effect/shardcake/ShardingImpl"
 import * as ShardManagerClient from "@effect/shardcake/ShardManagerClient"
 import * as Storage from "@effect/shardcake/Storage"
+import * as StreamMessage from "@effect/shardcake/StreamMessage"
+import * as Stream from "@effect/stream/Stream"
 import * as EventSourcedBehaviour from "@mattiamanzati/effect-es/EventSourcedBehaviour"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 
@@ -46,7 +48,13 @@ const [GetCurrentCount_, GetCurrentCount] = Message.schema(Schema.number)(
   })
 )
 
-const Command = Schema.union(Increment_, Decrement_, GetCurrentCount_)
+const [SubscribeCount_, SubscribeCount] = StreamMessage.schema(Schema.number)(
+  Schema.struct({
+    _tag: Schema.literal("SubscribeCount")
+  })
+)
+
+const Command = Schema.union(Increment_, Decrement_, GetCurrentCount_, SubscribeCount_)
 
 /* Events */
 const Incremented_ = Schema.struct({
@@ -65,7 +73,7 @@ const SampleEntity = RecipientType.makeEntityType("SampleEntity", Command)
 
 const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
   0,
-  (command, state, emit) => {
+  (command, state, emit, changes) => {
     switch (command._tag) {
       case "Increment":
         return emit([{ _tag: "Incremented", amount: command.amount }])
@@ -73,6 +81,8 @@ const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
         return emit([{ _tag: "Decremented", amount: command.amount }])
       case "GetCurrentCount":
         return command.replier.reply(state)
+      case "SubscribeCount":
+        return command.replier.reply(changes)
     }
   },
   (state, event) => {
@@ -88,6 +98,9 @@ const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
 Effect.gen(function*(_) {
   yield* _(Sharding.registerEntity(SampleEntity, behaviour, Option.none, Option.some(Duration.millis(500))))
   const messenger = yield* _(Sharding.messenger(SampleEntity))
+
+  const changes = yield* _(messenger.sendStream("counter1")(SubscribeCount({ _tag: "SubscribeCount" })))
+  yield* _(changes.pipe(Stream.tap((_) => Effect.log(`Count updated to ${_}`, "Info")), Stream.runDrain, Effect.fork))
 
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Increment", amount: 10 }))
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Decrement", amount: 8 }))

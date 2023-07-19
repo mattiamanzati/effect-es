@@ -23,7 +23,8 @@ export function make<Command, Event>(
     decide: (
       command: Command,
       state: State,
-      emit: (events: Iterable<Event>) => Effect.Effect<never, never, void>
+      emit: (events: Iterable<Event>) => Effect.Effect<never, never, void>,
+      changes: Stream.Stream<never, never, State>
     ) => Effect.Effect<R, never, void>,
     evolve: (state: State, event: Event) => State
   ) =>
@@ -34,6 +35,7 @@ export function make<Command, Event>(
         const projectionRef = yield* _(
           SubscriptionRef.make<Projection<State>>({ version: BigInt(0), state: initialState })
         )
+        const changes = projectionRef.changes.pipe(Stream.map((_) => _.state), Stream.changes)
 
         const updateProjection = pipe(
           SubscriptionRef.get(projectionRef),
@@ -64,7 +66,7 @@ export function make<Command, Event>(
                 Ref.make<Array<Event>>([]),
                 Effect.flatMap((eventsRef) =>
                   pipe(
-                    decide(command, currentProjection.state, makeAppendEvent(eventsRef)),
+                    decide(command, currentProjection.state, makeAppendEvent(eventsRef), changes),
                     Effect.zipRight(Ref.get(eventsRef)),
                     Effect.flatMap((events) =>
                       pipe(
