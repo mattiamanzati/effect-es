@@ -6,4 +6,4 @@ aux_links:
   "API Reference":
     - "//effect-ts.github.io/shardcake/docs/modules"
   "GitHub":
-    - "//github.com/effect-ts/shardcake"
+    - "//github.com/mattiamanzati/effect-es"

@@ -7,14 +7,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Effect-TS/shardcake.git"
+    "url": "https://github.com/mattiamanzati/effect-es.git"
   },
   "author": "Effectful Technologies",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Effect-TS/shardcake/issues"
+    "url": "https://github.com/mattiamanzati/effect-es/issues"
   },
-  "homepage": "https://github.com/Effect-TS/shardcake",
+  "homepage": "https://github.com/mattiamanzati/effect-es",
   "description": "Functional programming in TypeScript",
   "tags": [
     "typescript",
@@ -27,6 +27,9 @@
     "functional-programming"
   ],
   "scripts": {
+    "sample-manager": "pnpm run example ./examples/sample-manager.ts",
+    "sample-connect": "pnpm run example ./examples/sample-connect.ts",
+    "sample-shard": "pnpm run example ./examples/sample-shard.ts",
     "example": "ts-node --project tsconfig.examples.json",
     "version": "changeset version && pnpm install --no-frozen-lockfile && pnpm run docs-update",
     "release": "pnpm run build && changeset publish",
@@ -102,16 +105,17 @@
     "stackframe": "^1.3.4",
     "ts-codemod": "^4.0.4",
     "ts-node": "^10.9.1",
-    "typescript": "^5.0.4",
+    "typescript": "^5.1.6",
     "ultra-runner": "^3.10.5",
     "vite": "^4.2.1",
     "vitest": "0.29.8"
   },
   "dependencies": {
-    "@effect/data": "0.12.7",
-    "@effect/io": "0.26.0",
-    "@effect/schema": "0.20.1",
-    "@effect/stream": "0.22.1",
+    "@effect/data": "~0.15.0",
+    "@effect/io": "~0.33.0",
+    "@effect/schema": "~0.27.0",
+    "@effect/stream": "~0.27.0",
+    "@effect/shardcake": "https://gitpkg.now.sh/mattiamanzati/shardcake/dist?main",
     "node-fetch": "2"
   },
   "config": {
