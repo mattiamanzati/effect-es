@@ -66,7 +66,7 @@ export const inMemory = pipe(
           pipe(
             Ref.getAndUpdate(sequenceRef, (_) => _ + BigInt(1)),
             Effect.map((sequence) =>
-              BinaryEvent.make(sequence.toString(), sequence, streamId, fromVersion + BigInt(idx), body)
+              BinaryEvent.make(sequence.toString(), sequence, streamId, fromVersion + BigInt(1 + idx), body)
             )
           )
         ),

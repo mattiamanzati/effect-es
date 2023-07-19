@@ -1,4 +1,6 @@
+import * as Duration from "@effect/data/Duration"
 import { pipe } from "@effect/data/Function"
+import * as Option from "@effect/data/Option"
 import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
 import * as Logger from "@effect/io/Logger"
@@ -84,14 +86,19 @@ const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
 )
 
 Effect.gen(function*(_) {
-  yield* _(Sharding.registerEntity(SampleEntity, behaviour))
+  yield* _(Sharding.registerEntity(SampleEntity, behaviour, Option.none, Option.some(Duration.millis(500))))
   const messenger = yield* _(Sharding.messenger(SampleEntity))
 
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Increment", amount: 10 }))
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Decrement", amount: 8 }))
 
   const current = yield* _(messenger.send("counter1")(GetCurrentCount({ _tag: "GetCurrentCount" })))
-  console.log("Current is", current)
+  yield* _(Effect.log(`Current count is ${current}`, "Info"))
+
+  yield* _(Effect.sleep(Duration.millis(1000)))
+
+  const current2 = yield* _(messenger.send("counter1")(GetCurrentCount({ _tag: "GetCurrentCount" })))
+  yield* _(Effect.log(`Current count is still ${current2}! Entity replayed events!`, "Info"))
 }).pipe(
   Effect.provideSomeLayer(inMemorySharding),
   Effect.provideSomeLayer(EventStore.inMemory),

@@ -80,18 +80,19 @@ export function make<Command, Event>(
             )
           )
 
-        return pipe(
-          updateProjection,
+        return yield* _(pipe(
+          Effect.log(`Warming up entity ${streamId}`, "Info"),
+          Effect.zipRight(updateProjection),
           Effect.flatMap((_) =>
             pipe(
               Queue.take(dequeue),
-              Effect.tap((_) => Effect.log("Command received", "Info")),
               Effect.flatMap(handleCommand),
               Effect.zipRight(updateProjection),
               Effect.forever
             )
           ),
-          Effect.catchAllCause(Effect.logCause("Error"))
-        )
+          Effect.catchAllCause(Effect.logCause("Error")),
+          Effect.onInterrupt(() => Effect.log(`Shutting down entity ${streamId}`, "Info"))
+        ))
       })
 }
