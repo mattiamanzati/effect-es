@@ -4,25 +4,31 @@ module.exports = {
   parser: "@typescript-eslint/parser",
   parserOptions: {
     ecmaVersion: 2018,
-    sourceType: "module"
+    sourceType: "module",
   },
   settings: {
     "import/parsers": {
-      "@typescript-eslint/parser": [".ts", ".tsx"]
+      "@typescript-eslint/parser": [".ts", ".tsx"],
     },
     "import/resolver": {
       typescript: {
-        alwaysTryTypes: true
-      }
-    }
+        alwaysTryTypes: true,
+      },
+    },
   },
   extends: [
     "eslint:recommended",
     "plugin:@typescript-eslint/eslint-recommended",
     "plugin:@typescript-eslint/recommended",
-    "plugin:@repo-tooling/dprint/recommended"
+    "plugin:@repo-tooling/dprint/recommended",
   ],
-  plugins: ["deprecation", "import", "sort-destructure-keys", "simple-import-sort", "codegen"],
+  plugins: [
+    "deprecation",
+    "import",
+    "sort-destructure-keys",
+    "simple-import-sort",
+    "codegen",
+  ],
   rules: {
     "codegen/codegen": "error",
     "no-fallthrough": "off",
@@ -42,17 +48,23 @@ module.exports = {
     "simple-import-sort/imports": "off",
     "sort-destructure-keys/sort-destructure-keys": "error",
     "deprecation/deprecation": "off",
-    "@typescript-eslint/array-type": ["warn", { "default": "generic", "readonly": "generic" }],
+    "@typescript-eslint/array-type": [
+      "warn",
+      { default: "generic", readonly: "generic" },
+    ],
     "@typescript-eslint/member-delimiter-style": 0,
     "@typescript-eslint/no-non-null-assertion": "off",
     "@typescript-eslint/ban-types": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/no-empty-interface": "off",
     "@typescript-eslint/consistent-type-imports": "warn",
-    "@typescript-eslint/no-unused-vars": ["error", {
-      "argsIgnorePattern": "^_",
-      "varsIgnorePattern": "^_"
-    }],
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+      },
+    ],
     "@typescript-eslint/ban-ts-comment": "off",
     "@typescript-eslint/camelcase": "off",
     "@typescript-eslint/explicit-function-return-type": "off",
@@ -62,18 +74,18 @@ module.exports = {
     "@typescript-eslint/no-use-before-define": "off",
     "@typescript-eslint/no-namespace": "off",
     "@repo-tooling/dprint/dprint": [
-      "error",
+      "off",
       {
         config: {
-          "indentWidth": 2,
-          "lineWidth": 120,
-          "semiColons": "asi",
-          "quoteStyle": "alwaysDouble",
-          "trailingCommas": "never",
-          "operatorPosition": "maintain",
-          "arrowFunction.useParentheses": "force"
-        }
-      }
-    ]
-  }
-}
+          indentWidth: 2,
+          lineWidth: 120,
+          semiColons: "asi",
+          quoteStyle: "alwaysDouble",
+          trailingCommas: "never",
+          operatorPosition: "maintain",
+          "arrowFunction.useParentheses": "force",
+        },
+      },
+    ],
+  },
+};

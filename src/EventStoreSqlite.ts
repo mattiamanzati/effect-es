@@ -13,6 +13,8 @@ import * as BinaryEvent from "@mattiamanzati/effect-es/BinaryEvent"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 import * as fs from "fs"
 
+export const EVENTS_FILE = "events.sqlite3"
+
 /** @internal */
 export function jsonStringify<I extends JsonData, A>(value: A, schema: Schema.Schema<I, A>) {
   return pipe(
@@ -29,29 +31,6 @@ export function jsonParse<I extends JsonData, A>(value: string, schema: Schema.S
     Effect.sync(() => JSON.parse(value)),
     Effect.flatMap(Schema.decode(schema)),
     Effect.mapError((e) => DecodeError(TreeFormatter.formatErrors(e.errors)))
-  )
-}
-
-function appendJsonData<I extends JsonData, A>(fileName: string, schema: Schema.Schema<I, A>, data: A) {
-  return pipe(
-    jsonStringify(data, schema),
-    Effect.flatMap((data) => Effect.sync(() => fs.appendFileSync(fileName, data + "\n"))),
-    Effect.orDie
-  )
-}
-
-function readJsonData<I extends JsonData, A>(fileName: string, schema: Schema.Schema<I, A>, empty: A) {
-  return pipe(
-    Effect.sync(() => fs.existsSync(fileName)),
-    Effect.flatMap((exists) =>
-      exists
-        ? pipe(
-          Effect.sync(() => fs.readFileSync(fileName)),
-          Effect.flatMap((data) => jsonParse(data.toString(), schema))
-        )
-        : Effect.succeed(empty)
-    ),
-    Effect.orDie
   )
 }
 

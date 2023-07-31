@@ -116,6 +116,7 @@
     "@effect/schema": "~0.31.0",
     "@effect/stream": "~0.32.1",
     "@effect/shardcake": "https://gitpkg.now.sh/mattiamanzati/shardcake/dist?70d7717a6eadb917f1c1f5d94a4018cea47b0af6",
+    "sqlite3": "^5.1.6",
     "node-fetch": "2"
   },
   "config": {
