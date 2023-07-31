@@ -19,7 +19,7 @@ import * as Storage from "@effect/shardcake/Storage"
 import * as StreamMessage from "@effect/shardcake/StreamMessage"
 import * as Stream from "@effect/stream/Stream"
 import * as EventSourcedBehaviour from "@mattiamanzati/effect-es/EventSourcedBehaviour"
-import * as EventStore from "@mattiamanzati/effect-es/EventStore"
+import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
 
 const inMemorySharding = pipe(
   ShardingImpl.live,
@@ -114,7 +114,7 @@ Effect.gen(function*(_) {
   yield* _(Effect.logInfo(`Current count is still ${current2}! Entity replayed events!`))
 }).pipe(
   Effect.provideSomeLayer(inMemorySharding),
-  Effect.provideSomeLayer(EventStore.inMemory),
+  Effect.provideSomeLayer(EventStoreSqlite.eventStoreSqlite),
   Effect.provideSomeLayer(Serialization.json),
   Effect.scoped,
   Logger.withMinimumLogLevel(LogLevel.All),
