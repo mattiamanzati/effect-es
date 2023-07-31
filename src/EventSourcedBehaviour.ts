@@ -1,8 +1,9 @@
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
-import * as Queue from "@effect/io/Queue"
+import type * as Queue from "@effect/io/Queue"
 import * as Ref from "@effect/io/Ref"
 import type * as Schema from "@effect/schema/Schema"
+import * as PoisonPill from "@effect/shardcake/PoisonPill"
 import type * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
@@ -28,7 +29,7 @@ export function make<Command, Event>(
     ) => Effect.Effect<R, never, void>,
     evolve: (state: State, event: Event) => State
   ) =>
-    (streamId: string, dequeue: Queue.Dequeue<Command>) =>
+    (streamId: string, dequeue: Queue.Dequeue<Command | PoisonPill.PoisonPill>) =>
       Effect.gen(function*(_) {
         const eventStore = yield* _(EventStore.EventStore)
         const serialization = yield* _(Serialization.Serialization)
@@ -83,18 +84,18 @@ export function make<Command, Event>(
           )
 
         return yield* _(pipe(
-          Effect.log(`Warming up entity ${streamId}`, "Info"),
+          Effect.logInfo(`Warming up entity ${streamId}`),
           Effect.zipRight(updateProjection),
           Effect.flatMap((_) =>
             pipe(
-              Queue.take(dequeue),
+              PoisonPill.takeOrInterrupt(dequeue),
               Effect.flatMap(handleCommand),
               Effect.zipRight(updateProjection),
               Effect.forever
             )
           ),
-          Effect.catchAllCause(Effect.logCause("Error")),
-          Effect.onInterrupt(() => Effect.log(`Shutting down entity ${streamId}`, "Info"))
+          Effect.catchAllCause(Effect.logError),
+          Effect.onInterrupt(() => Effect.logInfo(`Shutting down entity ${streamId}`))
         ))
       })
 }

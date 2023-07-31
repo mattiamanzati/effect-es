@@ -96,22 +96,22 @@ const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
 )
 
 Effect.gen(function*(_) {
-  yield* _(Sharding.registerEntity(SampleEntity, behaviour, Option.none, Option.some(Duration.millis(500))))
+  yield* _(Sharding.registerEntity(SampleEntity, behaviour, Option.some(Duration.millis(500))))
   const messenger = yield* _(Sharding.messenger(SampleEntity))
 
   const changes = yield* _(messenger.sendStream("counter1")(SubscribeCount({ _tag: "SubscribeCount" })))
-  yield* _(changes.pipe(Stream.tap((_) => Effect.log(`Count updated to ${_}`, "Info")), Stream.runDrain, Effect.fork))
+  yield* _(changes.pipe(Stream.tap((_) => Effect.logInfo(`Count updated to ${_}`)), Stream.runDrain, Effect.fork))
 
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Increment", amount: 10 }))
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Decrement", amount: 8 }))
 
   const current = yield* _(messenger.send("counter1")(GetCurrentCount({ _tag: "GetCurrentCount" })))
-  yield* _(Effect.log(`Current count is ${current}`, "Info"))
+  yield* _(Effect.logInfo(`Current count is ${current}`))
 
   yield* _(Effect.sleep(Duration.millis(1000)))
 
   const current2 = yield* _(messenger.send("counter1")(GetCurrentCount({ _tag: "GetCurrentCount" })))
-  yield* _(Effect.log(`Current count is still ${current2}! Entity replayed events!`, "Info"))
+  yield* _(Effect.logInfo(`Current count is still ${current2}! Entity replayed events!`))
 }).pipe(
   Effect.provideSomeLayer(inMemorySharding),
   Effect.provideSomeLayer(EventStore.inMemory),

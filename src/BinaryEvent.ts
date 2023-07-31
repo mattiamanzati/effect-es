@@ -59,9 +59,9 @@ export const schema = Schema.data(
   Schema.struct({
     _id: Schema.literal(TypeId),
     id: Schema.string,
-    sequence: Schema.bigint,
+    sequence: Schema.BigintFromString,
     streamId: Schema.string,
-    version: Schema.bigint,
+    version: Schema.BigintFromString,
     body: ByteArray.schema
   })
 )

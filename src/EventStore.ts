@@ -56,7 +56,7 @@ export const inMemory = pipe(
         Ref.get(memoryRef),
         Effect.map((events) => events.filter((e) => e.streamId === streamId && e.version > fromVersion)),
         Effect.map((_) => Stream.fromIterable(_)),
-        Stream.flatten
+        Stream.flatten()
       )
 
     const persistEvents = (streamId: string, fromVersion: bigint, events: Iterable<ByteArray.ByteArray>) =>
