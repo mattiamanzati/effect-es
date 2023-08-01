@@ -32,11 +32,12 @@ export interface BinaryEvent extends Schema.To<typeof schema> {}
 export function make(
   id: string,
   sequence: bigint,
-  streamId: string,
+  entityType: string,
+  entityId: string,
   version: bigint,
   body: ByteArray.ByteArray
 ): BinaryEvent {
-  return Data.struct({ _id: TypeId, id, sequence, streamId, version, body })
+  return Data.struct({ _id: TypeId, id, sequence, entityType, entityId, version, body })
 }
 
 /** @internal */
@@ -60,7 +61,8 @@ export const schema = Schema.data(
     _id: Schema.literal(TypeId),
     id: Schema.string,
     sequence: Schema.BigintFromString,
-    streamId: Schema.string,
+    entityType: Schema.string,
+    entityId: Schema.string,
     version: Schema.BigintFromString,
     body: ByteArray.schema
   })

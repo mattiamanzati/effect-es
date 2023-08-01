@@ -42,7 +42,7 @@ export function make<Command, Event>(
           SubscriptionRef.get(projectionRef),
           Effect.flatMap((currentProjection) =>
             pipe(
-              eventStore.readStream(streamId, currentProjection.version, true),
+              eventStore.readStream(entityType.name, streamId, currentProjection.version),
               Stream.runFoldEffect(
                 currentProjection,
                 (p, e) =>
@@ -73,7 +73,7 @@ export function make<Command, Event>(
                       pipe(
                         Effect.forEach(events, (_) => serialization.encode(_, eventsSchema)),
                         Effect.flatMap((byteArrays) =>
-                          eventStore.persistEvents(streamId, currentProjection.version, byteArrays)
+                          eventStore.persistEvents(entityType.name, streamId, currentProjection.version, byteArrays)
                         )
                       )
                     )

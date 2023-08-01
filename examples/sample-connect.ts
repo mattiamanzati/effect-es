@@ -114,7 +114,7 @@ Effect.gen(function*(_) {
   yield* _(Effect.logInfo(`Current count is still ${current2}! Entity replayed events!`))
 }).pipe(
   Effect.provideSomeLayer(inMemorySharding),
-  Effect.provideSomeLayer(EventStoreSqlite.eventStoreSqlite),
+  Effect.provideSomeLayer(EventStoreSqlite.eventStoreSqlite("events.sqlite3")),
   Effect.provideSomeLayer(Serialization.json),
   Effect.scoped,
   Logger.withMinimumLogLevel(LogLevel.All),

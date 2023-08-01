@@ -39,7 +39,7 @@ export function withSqliteConnection(fileName: string) {
   )
 }
 
-export function run(sql: string, args: Array<(string | number | null | bigint)>) {
+export function run(sql: string, args: Array<(string | number | null)>) {
   return pipe(
     prepare(sql, args),
     Effect.flatMap((statement) =>
@@ -67,7 +67,7 @@ export function runInTransaction<R, E, A>(fa: Effect.Effect<R, E, A>) {
   )
 }
 
-function prepare(sql: string, args: Array<(string | number | null | bigint)>) {
+function prepare(sql: string, args: Array<(string | number | null)>) {
   return Effect.flatMap(SqliteConnection, ({ db }) =>
     Effect.acquireRelease(
       Effect.async<never, never, sqlite3.Statement>((resume) => {
@@ -92,7 +92,7 @@ function prepare(sql: string, args: Array<(string | number | null | bigint)>) {
     ))
 }
 
-export function query(sql: string, args: Array<(string | number | null | bigint)>) {
+export function query(sql: string, args: Array<(string | number | null)>) {
   return pipe(
     prepare(sql, args),
     Effect.map((statement) =>

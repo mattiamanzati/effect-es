@@ -28,18 +28,27 @@ export const EventStore = Tag<EventStore>(TypeId)
  */
 export interface EventStore {
   /**
-   * Reads the events from the stream starting from the specified version
+   * Reads all the events starting from the specified sequence
+   */
+  readJournal(
+    fromSequence: bigint,
+    closeOnEnd: boolean
+  ): Stream.Stream<never, never, BinaryEvent.BinaryEvent>
+
+  /**
+   * Reads the events from the entity stream starting from the specified version
    */
   readStream(
-    streamId: string,
-    fromVersion: bigint,
-    closeOnEnd: boolean
+    entityType: string,
+    entityId: string,
+    fromVersion: bigint
   ): Stream.Stream<never, never, BinaryEvent.BinaryEvent>
 
   /**
    * Persists a list of events in a transaction, ensuring sequence is mantained
    */
   persistEvents(
+    streamType: string,
     streamId: string,
     currentVersion: bigint,
     events: Iterable<ByteArray.ByteArray>
@@ -51,29 +60,44 @@ export const inMemory = pipe(
     const sequenceRef = yield* _(Ref.make(BigInt(1)))
     const memoryRef = yield* _(Ref.make<Array<BinaryEvent.BinaryEvent>>([]))
 
-    const readStream = (streamId: string, fromVersion: bigint) =>
+    const readJournal = (fromSequence: bigint) =>
       pipe(
         Ref.get(memoryRef),
-        Effect.map((events) => events.filter((e) => e.streamId === streamId && e.version > fromVersion)),
+        Effect.map((events) => events.filter((e) => e.sequence > fromSequence)),
         Effect.map((_) => Stream.fromIterable(_)),
         Stream.flatten()
       )
 
-    const persistEvents = (streamId: string, fromVersion: bigint, events: Iterable<ByteArray.ByteArray>) =>
+    const readStream = (entityType: string, entityId: string, fromVersion: bigint) =>
+      pipe(
+        Ref.get(memoryRef),
+        Effect.map((events) =>
+          events.filter((e) => e.entityType === entityType && e.entityId === entityId && e.version > fromVersion)
+        ),
+        Effect.map((_) => Stream.fromIterable(_)),
+        Stream.flatten()
+      )
+
+    const persistEvents = (
+      entityType: string,
+      entityId: string,
+      fromVersion: bigint,
+      events: Iterable<ByteArray.ByteArray>
+    ) =>
       pipe(
         events,
         Effect.forEach((body, idx) =>
           pipe(
             Ref.getAndUpdate(sequenceRef, (_) => _ + BigInt(1)),
             Effect.map((sequence) =>
-              BinaryEvent.make(sequence.toString(), sequence, streamId, fromVersion + BigInt(1 + idx), body)
+              BinaryEvent.make(sequence.toString(), sequence, entityType, entityId, fromVersion + BigInt(1 + idx), body)
             )
           )
         ),
         Effect.flatMap((items) => Ref.update(memoryRef, (_) => _.concat(items)))
       )
 
-    return { readStream, persistEvents }
+    return { readJournal, readStream, persistEvents }
   }),
   Layer.effect(EventStore)
 )
