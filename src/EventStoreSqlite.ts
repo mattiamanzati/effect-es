@@ -93,7 +93,8 @@ export function eventStoreSqlite(fileName: string) {
           Ref.make(fromSequence),
           Effect.map((seqRef) =>
             pipe(
-              getChangesStream(fileName),
+              Stream.succeed(true),
+              Stream.concat(getChangesStream(fileName)),
               Stream.mapEffect(() => Ref.get(seqRef)),
               Stream.flatMap((lastSequence) =>
                 pipe(
@@ -109,7 +110,7 @@ export function eventStoreSqlite(fileName: string) {
           FROM event_journal 
           WHERE 
             sequence > ?
-          ORDER BY sequence`,
+          ORDER BY event_journal.sequence ASC`,
                     [
                       String(lastSequence)
                     ]
@@ -150,7 +151,7 @@ export function eventStoreSqlite(fileName: string) {
             entity_type = ?
             AND entity_id = ? 
             AND version > ?
-          ORDER BY version ASC`,
+          ORDER BY event_journal.version ASC`,
             [
               entityType,
               entityId,

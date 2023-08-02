@@ -96,16 +96,27 @@ const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
   }
 )
 
+const processManager = pipe(
+  EventStore.EventStore,
+  Effect.map((eventStore) =>
+    pipe(
+      eventStore.readJournal(BigInt(0), false),
+      Stream.map((e) => console.log(e))
+    )
+  ),
+  Stream.unwrapScoped,
+  Stream.runDrain,
+  Effect.catchAllCause(Effect.logError)
+)
+
 Effect.gen(function*(_) {
   yield* _(Sharding.registerEntity(SampleEntity, behaviour, Option.some(Duration.millis(500))))
   yield* _(Sharding.registerSingleton(
     "process-manager",
-    pipe(
-      EventStore.EventStore,
-      Effect.flatMap((eventStore) => eventStore.readJournal(0n, false)),
-      Effect.asUnit
-    )
+    processManager
   ))
+  yield* _(Sharding.registerScoped)
+
   const messenger = yield* _(Sharding.messenger(SampleEntity))
 
   const changes = yield* _(messenger.sendStream("counter1")(SubscribeCount({ _tag: "SubscribeCount" })))
