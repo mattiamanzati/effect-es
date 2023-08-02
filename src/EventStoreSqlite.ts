@@ -85,7 +85,7 @@ export function eventStoreSqlite(fileName: string) {
       `,
           []
         ),
-        Effect.provideSomeLayer(Sqlite.withSqliteConnection(EVENTS_FILE))
+        Effect.provideSomeLayer(Sqlite.withSqliteConnection(EVENTS_FILE, true))
       ))
 
       const readJournal = (fromSequence: bigint) =>
@@ -94,7 +94,7 @@ export function eventStoreSqlite(fileName: string) {
           Effect.map((seqRef) =>
             pipe(
               Stream.succeed(true),
-              Stream.concat(getChangesStream(fileName)),
+              Stream.merge(getChangesStream(fileName)),
               Stream.mapEffect(() => Ref.get(seqRef)),
               Stream.flatMap((lastSequence) =>
                 pipe(
@@ -127,9 +127,9 @@ export function eventStoreSqlite(fileName: string) {
                     )
                   ),
                   Stream.tap((binaryEvent) => Ref.set(seqRef, binaryEvent.sequence)),
-                  Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName)),
+                  Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName, false)),
                   Stream.orDie
-                ), { switch: true })
+                ), { switch: true, bufferSize: 1, concurrency: "unbounded" })
             )
           ),
           Stream.unwrap
@@ -169,7 +169,7 @@ export function eventStoreSqlite(fileName: string) {
               ByteArray.make(row.body)
             )
           ),
-          Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName)),
+          Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName, false)),
           Stream.orDie
         )
 
@@ -220,7 +220,7 @@ export function eventStoreSqlite(fileName: string) {
             )
           ),
           Sqlite.runInTransaction,
-          Effect.provideSomeLayer(Sqlite.withSqliteConnection(fileName)),
+          Effect.provideSomeLayer(Sqlite.withSqliteConnection(fileName, true)),
           Effect.orDie
         )
 

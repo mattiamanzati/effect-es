@@ -13,13 +13,13 @@ export interface SqliteConnection {
 
 export const SqliteConnection = Tag<SqliteConnection>()
 
-export function withSqliteConnection(fileName: string) {
+export function withSqliteConnection(fileName: string, writeable: boolean) {
   return pipe(
     Effect.acquireRelease(
       Effect.async<never, never, sqlite3.Database>((resume) => {
         const db: sqlite3.Database = new sqlite3.Database(
           fileName,
-          sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE,
+          writeable ? sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE : sqlite3.OPEN_READONLY,
           (err) => {
             if (err === null) {
               resume(Effect.succeed(db))

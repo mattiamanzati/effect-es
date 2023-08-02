@@ -101,7 +101,7 @@ const processManager = pipe(
   Effect.map((eventStore) =>
     pipe(
       eventStore.readJournal(BigInt(0), false),
-      Stream.map((e) => console.log(e))
+      Stream.tap((e) => Effect.logInfo("process-manager event " + e.id))
     )
   ),
   Stream.unwrapScoped,
