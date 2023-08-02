@@ -19,6 +19,7 @@ import * as Storage from "@effect/shardcake/Storage"
 import * as StreamMessage from "@effect/shardcake/StreamMessage"
 import * as Stream from "@effect/stream/Stream"
 import * as EventSourcedBehaviour from "@mattiamanzati/effect-es/EventSourcedBehaviour"
+import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
 
 const inMemorySharding = pipe(
@@ -97,6 +98,14 @@ const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
 
 Effect.gen(function*(_) {
   yield* _(Sharding.registerEntity(SampleEntity, behaviour, Option.some(Duration.millis(500))))
+  yield* _(Sharding.registerSingleton(
+    "process-manager",
+    pipe(
+      EventStore.EventStore,
+      Effect.flatMap((eventStore) => eventStore.readJournal(0n, false)),
+      Effect.asUnit
+    )
+  ))
   const messenger = yield* _(Sharding.messenger(SampleEntity))
 
   const changes = yield* _(messenger.sendStream("counter1")(SubscribeCount({ _tag: "SubscribeCount" })))

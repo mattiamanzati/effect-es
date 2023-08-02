@@ -2,6 +2,7 @@ import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
 import * as Queue from "@effect/io/Queue"
+import * as Ref from "@effect/io/Ref"
 import * as Schema from "@effect/schema/Schema"
 import * as TreeFormatter from "@effect/schema/TreeFormatter"
 import * as ByteArray from "@effect/shardcake/ByteArray"
@@ -89,36 +90,48 @@ export function eventStoreSqlite(fileName: string) {
 
       const readJournal = (fromSequence: bigint) =>
         pipe(
-          Sqlite.query(
-            `
-        SELECT 
-          id, 
-          CAST(sequence AS TEXT) AS sequence,
-          entity_type,
-          entity_id,
-          CAST(version AS TEXT) AS version,
-          body
-        FROM event_journal 
-        WHERE 
-          sequence > ?
-        ORDER BY sequence`,
-            [
-              String(fromSequence)
-            ]
-          ),
-          Stream.flatMap(Schema.parse(EventJournalRow)),
-          Stream.map((row) =>
-            BinaryEvent.make(
-              row.id,
-              row.sequence,
-              row.entity_type,
-              row.entity_id,
-              row.version,
-              ByteArray.make(row.body)
+          Ref.make(fromSequence),
+          Effect.map((seqRef) =>
+            pipe(
+              getChangesStream(fileName),
+              Stream.mapEffect(() => Ref.get(seqRef)),
+              Stream.flatMap((lastSequence) =>
+                pipe(
+                  Sqlite.query(
+                    `
+          SELECT 
+            id, 
+            CAST(sequence AS TEXT) AS sequence,
+            entity_type,
+            entity_id,
+            CAST(version AS TEXT) AS version,
+            body
+          FROM event_journal 
+          WHERE 
+            sequence > ?
+          ORDER BY sequence`,
+                    [
+                      String(lastSequence)
+                    ]
+                  ),
+                  Stream.flatMap(Schema.parse(EventJournalRow)),
+                  Stream.map((row) =>
+                    BinaryEvent.make(
+                      row.id,
+                      row.sequence,
+                      row.entity_type,
+                      row.entity_id,
+                      row.version,
+                      ByteArray.make(row.body)
+                    )
+                  ),
+                  Stream.tap((binaryEvent) => Ref.set(seqRef, binaryEvent.sequence)),
+                  Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName)),
+                  Stream.orDie
+                ), { switch: true })
             )
           ),
-          Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName)),
-          Stream.orDie
+          Stream.unwrap
         )
 
       const readStream = (entityType: string, entityId: string, fromVersion: bigint) =>
