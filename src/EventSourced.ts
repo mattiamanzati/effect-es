@@ -1,3 +1,7 @@
+/**
+ * @since 1.0.0
+ */
+import * as Data from "@effect/data/Data"
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import type * as Queue from "@effect/io/Queue"
@@ -10,14 +14,46 @@ import * as Stream from "@effect/stream/Stream"
 import * as SubscriptionRef from "@effect/stream/SubscriptionRef"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 
+/**
+ * @since 1.0.0
+ * @category symbols
+ */
+export const TypeId = "@mattiamanzati/effect-es/EventSourced"
+
+/**
+ * @since 1.0.0
+ * @category symbols
+ */
+export type TypeId = typeof TypeId
+
+/**
+ * @since 1.0.0
+ * @category models
+ */
+export interface EventSourced<Command, Event> {
+  _id: TypeId
+  recipientType: RecipientType.RecipientType<Command>
+  eventsSchema: Schema.Schema<any, Event>
+}
+
+/**
+ * @since 1.0.0
+ * @category constructors
+ */
+export function make<Command, Event>(
+  recipientType: RecipientType.RecipientType<Command>,
+  eventsSchema: Schema.Schema<any, Event>
+): EventSourced<Command, Event> {
+  return Data.struct({ _id: TypeId, recipientType, eventsSchema })
+}
+
 interface Projection<State> {
   version: bigint
   state: State
 }
 
-export function make<Command, Event>(
-  entityType: RecipientType.RecipientType<Command>,
-  eventsSchema: Schema.Schema<any, Event>
+export function behaviour<Command, Event>(
+  eventSourced: EventSourced<Command, Event>
 ) {
   return <State, R>(
     initialState: State,
@@ -42,12 +78,12 @@ export function make<Command, Event>(
           SubscriptionRef.get(projectionRef),
           Effect.flatMap((currentProjection) =>
             pipe(
-              eventStore.readStream(entityType.name, streamId, currentProjection.version),
+              eventStore.readStream(eventSourced.recipientType.name, streamId, currentProjection.version),
               Stream.runFoldEffect(
                 currentProjection,
                 (p, e) =>
                   Effect.map(
-                    serialization.decode(e.body, eventsSchema),
+                    serialization.decode(e.body, eventSourced.eventsSchema),
                     (event) => ({ version: e.version, state: evolve(p.state, event) })
                   )
               )
@@ -71,9 +107,14 @@ export function make<Command, Event>(
                     Effect.zipRight(Ref.get(eventsRef)),
                     Effect.flatMap((events) =>
                       pipe(
-                        Effect.forEach(events, (_) => serialization.encode(_, eventsSchema)),
+                        Effect.forEach(events, (_) => serialization.encode(_, eventSourced.eventsSchema)),
                         Effect.flatMap((byteArrays) =>
-                          eventStore.persistEvents(entityType.name, streamId, currentProjection.version, byteArrays)
+                          eventStore.persistEvents(
+                            eventSourced.recipientType.name,
+                            streamId,
+                            currentProjection.version,
+                            byteArrays
+                          )
                         )
                       )
                     )

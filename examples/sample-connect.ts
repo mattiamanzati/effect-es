@@ -18,7 +18,7 @@ import * as ShardManagerClient from "@effect/shardcake/ShardManagerClient"
 import * as Storage from "@effect/shardcake/Storage"
 import * as StreamMessage from "@effect/shardcake/StreamMessage"
 import * as Stream from "@effect/stream/Stream"
-import * as EventSourcedBehaviour from "@mattiamanzati/effect-es/EventSourcedBehaviour"
+import * as EventSourced from "@mattiamanzati/effect-es/EventSourced"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
 
@@ -56,6 +56,7 @@ const [SubscribeCount_, SubscribeCount] = StreamMessage.schema(Schema.number)(
 )
 
 const Command = Schema.union(Increment_, Decrement_, GetCurrentCount_, SubscribeCount_)
+const SampleEntity = RecipientType.makeEntityType("SampleEntity", Command)
 
 /* Events */
 const Incremented_ = Schema.struct({
@@ -69,10 +70,9 @@ const Decremented_ = Schema.struct({
 })
 
 const Event = Schema.union(Incremented_, Decremented_)
+const SampleEventSourced = EventSourced.make(SampleEntity, Event)
 
-const SampleEntity = RecipientType.makeEntityType("SampleEntity", Command)
-
-const behaviour = EventSourcedBehaviour.make(SampleEntity, Event)(
+const behaviour = EventSourced.behaviour(SampleEventSourced)(
   0,
   (command, state, emit, changes) => {
     switch (command._tag) {
