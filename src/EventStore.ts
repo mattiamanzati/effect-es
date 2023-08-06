@@ -7,6 +7,7 @@ import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
 import * as Ref from "@effect/io/Ref"
 import type * as ByteArray from "@effect/shardcake/ByteArray"
+import type * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Stream from "@effect/stream/Stream"
 import * as BinaryEvent from "@mattiamanzati/effect-es/BinaryEvent"
 
@@ -36,10 +37,10 @@ export interface EventStore {
   ): Stream.Stream<never, never, BinaryEvent.BinaryEvent>
 
   /**
-   * Reads the events from the entity stream starting from the specified version
+   * Reads the events from the entity stream starting from the specified version, closes the stream when there are no more events.
    */
-  readStream(
-    entityType: string,
+  readStream<A>(
+    recipientType: RecipientType.RecipientType<A>,
     entityId: string,
     fromVersion: bigint
   ): Stream.Stream<never, never, BinaryEvent.BinaryEvent>
@@ -47,9 +48,9 @@ export interface EventStore {
   /**
    * Persists a list of events in a transaction, ensuring sequence is mantained
    */
-  persistEvents(
-    streamType: string,
-    streamId: string,
+  persistEvents<A>(
+    recipientType: RecipientType.RecipientType<A>,
+    entityId: string,
     currentVersion: bigint,
     events: Iterable<ByteArray.ByteArray>
   ): Effect.Effect<never, never, void>
@@ -68,18 +69,20 @@ export const inMemory = pipe(
         Stream.flatten()
       )
 
-    const readStream = (entityType: string, entityId: string, fromVersion: bigint) =>
+    const readStream = <A>(recipientType: RecipientType.RecipientType<A>, entityId: string, fromVersion: bigint) =>
       pipe(
         Ref.get(memoryRef),
         Effect.map((events) =>
-          events.filter((e) => e.entityType === entityType && e.entityId === entityId && e.version > fromVersion)
+          events.filter((e) =>
+            e.entityType === recipientType.name && e.entityId === entityId && e.version > fromVersion
+          )
         ),
         Effect.map((_) => Stream.fromIterable(_)),
         Stream.flatten()
       )
 
-    const persistEvents = (
-      entityType: string,
+    const persistEvents = <A>(
+      recipientType: RecipientType.RecipientType<A>,
       entityId: string,
       fromVersion: bigint,
       events: Iterable<ByteArray.ByteArray>
@@ -90,7 +93,14 @@ export const inMemory = pipe(
           pipe(
             Ref.getAndUpdate(sequenceRef, (_) => _ + BigInt(1)),
             Effect.map((sequence) =>
-              BinaryEvent.make(sequence.toString(), sequence, entityType, entityId, fromVersion + BigInt(1 + idx), body)
+              BinaryEvent.make(
+                sequence.toString(),
+                sequence,
+                recipientType.name,
+                entityId,
+                fromVersion + BigInt(1 + idx),
+                body
+              )
             )
           )
         ),

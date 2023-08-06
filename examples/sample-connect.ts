@@ -74,7 +74,7 @@ const SampleEventSourced = EventSourced.make(SampleEntity, Event)
 
 const behaviour = EventSourced.behaviour(SampleEventSourced)(
   0,
-  (command, state, emit, changes) => {
+  ({ changes, command, emit, state }) => {
     switch (command._tag) {
       case "Increment":
         return emit([{ _tag: "Incremented", amount: command.amount }])
@@ -86,7 +86,7 @@ const behaviour = EventSourced.behaviour(SampleEventSourced)(
         return command.replier.reply(changes)
     }
   },
-  (state, event) => {
+  ({ event, state }) => {
     switch (event._tag) {
       case "Incremented":
         return state + event.amount
@@ -101,7 +101,7 @@ const processManager = pipe(
   Effect.map((eventStore) =>
     pipe(
       eventStore.readJournal(BigInt(0), false),
-      Stream.tap((e) => Effect.logInfo("process-manager event " + e.id))
+      Stream.tap(() => Effect.unit) // Effect.logInfo("process-manager event " + e.id))
     )
   ),
   Stream.unwrapScoped,
@@ -120,7 +120,7 @@ Effect.gen(function*(_) {
   const messenger = yield* _(Sharding.messenger(SampleEntity))
 
   const changes = yield* _(messenger.sendStream("counter1")(SubscribeCount({ _tag: "SubscribeCount" })))
-  yield* _(changes.pipe(Stream.tap((_) => Effect.logInfo(`Count updated to ${_}`)), Stream.runDrain, Effect.fork))
+  yield* _(changes.pipe(Stream.tap((_) => Effect.logInfo(`Count is now ${_}`)), Stream.runDrain, Effect.fork))
 
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Increment", amount: 10 }))
   yield* _(messenger.sendDiscard("counter1")({ _tag: "Decrement", amount: 8 }))

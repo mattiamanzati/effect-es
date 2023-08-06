@@ -52,44 +52,52 @@ interface Projection<State> {
   state: State
 }
 
+interface DecideArgs<Command, Event, State> extends Projection<State> {
+  entityId: string
+  command: Command
+  emit: (events: Iterable<Event>) => Effect.Effect<never, never, void>
+  changes: Stream.Stream<never, never, State>
+}
+
+interface EvolveArgs<Event, State> extends Projection<State> {
+  entityId: string
+  event: Event
+}
+
 export function behaviour<Command, Event>(
   eventSourced: EventSourced<Command, Event>
 ) {
   return <State, R>(
     initialState: State,
-    decide: (
-      command: Command,
-      state: State,
-      emit: (events: Iterable<Event>) => Effect.Effect<never, never, void>,
-      changes: Stream.Stream<never, never, State>
-    ) => Effect.Effect<R, never, void>,
-    evolve: (state: State, event: Event) => State
+    decide: (args: DecideArgs<Command, Event, State>) => Effect.Effect<R, never, void>,
+    evolve: (args: EvolveArgs<Event, State>) => State
   ) =>
-    (streamId: string, dequeue: Queue.Dequeue<Command | PoisonPill.PoisonPill>) =>
+    (entityId: string, dequeue: Queue.Dequeue<Command | PoisonPill.PoisonPill>) =>
       Effect.gen(function*(_) {
         const eventStore = yield* _(EventStore.EventStore)
         const serialization = yield* _(Serialization.Serialization)
         const projectionRef = yield* _(
           SubscriptionRef.make<Projection<State>>({ version: BigInt(0), state: initialState })
         )
-        const changes = projectionRef.changes.pipe(Stream.map((_) => _.state), Stream.changes)
+
+        const changes = projectionRef.changes.pipe(Stream.map((p) => p.state), Stream.changes)
 
         const updateProjection = pipe(
-          SubscriptionRef.get(projectionRef),
+          Ref.get(projectionRef),
           Effect.flatMap((currentProjection) =>
             pipe(
-              eventStore.readStream(eventSourced.recipientType.name, streamId, currentProjection.version),
+              eventStore.readStream(eventSourced.recipientType, entityId, currentProjection.version),
               Stream.runFoldEffect(
                 currentProjection,
                 (p, e) =>
                   Effect.map(
                     serialization.decode(e.body, eventSourced.eventsSchema),
-                    (event) => ({ version: e.version, state: evolve(p.state, event) })
+                    (event) => ({ version: e.version, state: evolve({ ...p, entityId, event }) })
                   )
               )
             )
           ),
-          Effect.flatMap((_) => SubscriptionRef.set(projectionRef, _))
+          Effect.flatMap((_) => Ref.set(projectionRef, _))
         )
 
         const makeAppendEvent = (eventsRef: Ref.Ref<Array<Event>>) =>
@@ -97,21 +105,21 @@ export function behaviour<Command, Event>(
 
         const handleCommand = (command: Command) =>
           pipe(
-            SubscriptionRef.get(projectionRef),
+            Ref.get(projectionRef),
             Effect.flatMap((currentProjection) =>
               pipe(
                 Ref.make<Array<Event>>([]),
                 Effect.flatMap((eventsRef) =>
                   pipe(
-                    decide(command, currentProjection.state, makeAppendEvent(eventsRef), changes),
+                    decide({ ...currentProjection, emit: makeAppendEvent(eventsRef), entityId, command, changes }),
                     Effect.zipRight(Ref.get(eventsRef)),
                     Effect.flatMap((events) =>
                       pipe(
                         Effect.forEach(events, (_) => serialization.encode(_, eventSourced.eventsSchema)),
                         Effect.flatMap((byteArrays) =>
                           eventStore.persistEvents(
-                            eventSourced.recipientType.name,
-                            streamId,
+                            eventSourced.recipientType,
+                            entityId,
                             currentProjection.version,
                             byteArrays
                           )
@@ -125,7 +133,7 @@ export function behaviour<Command, Event>(
           )
 
         return yield* _(pipe(
-          Effect.logInfo(`Warming up entity ${streamId}`),
+          Effect.logInfo(`Warming up entity ${entityId}`),
           Effect.zipRight(updateProjection),
           Effect.flatMap((_) =>
             pipe(
@@ -136,7 +144,7 @@ export function behaviour<Command, Event>(
             )
           ),
           Effect.catchAllCause(Effect.logError),
-          Effect.onInterrupt(() => Effect.logInfo(`Shutting down entity ${streamId}`))
+          Effect.onInterrupt(() => Effect.logInfo(`Shutting down entity ${entityId}`))
         ))
       })
 }

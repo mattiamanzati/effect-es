@@ -6,6 +6,7 @@ import * as Ref from "@effect/io/Ref"
 import * as Schema from "@effect/schema/Schema"
 import * as TreeFormatter from "@effect/schema/TreeFormatter"
 import * as ByteArray from "@effect/shardcake/ByteArray"
+import type * as RecipientType from "@effect/shardcake/RecipientType"
 import { DecodeError, EncodeError } from "@effect/shardcake/ShardError"
 import type { JsonData } from "@effect/shardcake/utils"
 import * as Stream from "@effect/stream/Stream"
@@ -135,7 +136,7 @@ export function eventStoreSqlite(fileName: string) {
           Stream.unwrap
         )
 
-      const readStream = (entityType: string, entityId: string, fromVersion: bigint) =>
+      const readStream = <A>(recipientType: RecipientType.RecipientType<A>, entityId: string, fromVersion: bigint) =>
         pipe(
           Sqlite.query(
             `
@@ -153,7 +154,7 @@ export function eventStoreSqlite(fileName: string) {
             AND version > ?
           ORDER BY event_journal.version ASC`,
             [
-              entityType,
+              recipientType.name,
               entityId,
               String(fromVersion)
             ]
@@ -173,8 +174,8 @@ export function eventStoreSqlite(fileName: string) {
           Stream.orDie
         )
 
-      const persistEvents = (
-        entityType: string,
+      const persistEvents = <A>(
+        recipientType: RecipientType.RecipientType<A>,
         entityId: string,
         fromVersion: bigint,
         events: Iterable<ByteArray.ByteArray>
@@ -183,7 +184,7 @@ export function eventStoreSqlite(fileName: string) {
           Sqlite.query(
             "SELECT CAST(COALESCE(MAX(sequence), 0) AS TEXT) AS sequence FROM event_journal WHERE entity_type = ? AND entity_id = ?",
             [
-              entityType,
+              recipientType.name,
               entityId
             ]
           ),
@@ -197,7 +198,7 @@ export function eventStoreSqlite(fileName: string) {
                   BinaryEvent.make(
                     String(sequence + BigInt(1 + idx)),
                     sequence + BigInt(1 + idx),
-                    entityType,
+                    recipientType.name,
                     entityId,
                     fromVersion + BigInt(1 + idx),
                     body
