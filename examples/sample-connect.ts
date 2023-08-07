@@ -19,7 +19,6 @@ import * as Storage from "@effect/shardcake/Storage"
 import * as StreamMessage from "@effect/shardcake/StreamMessage"
 import * as Stream from "@effect/stream/Stream"
 import * as EventSourced from "@mattiamanzati/effect-es/EventSourced"
-import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
 
 const inMemorySharding = pipe(
@@ -96,25 +95,8 @@ const behaviour = EventSourced.behaviour(SampleEventSourced)(
   }
 )
 
-const processManager = pipe(
-  EventStore.EventStore,
-  Effect.map((eventStore) =>
-    pipe(
-      eventStore.readJournal(BigInt(0), false),
-      Stream.tap(() => Effect.unit) // Effect.logInfo("process-manager event " + e.id))
-    )
-  ),
-  Stream.unwrapScoped,
-  Stream.runDrain,
-  Effect.catchAllCause(Effect.logError)
-)
-
 Effect.gen(function*(_) {
   yield* _(Sharding.registerEntity(SampleEntity, behaviour, Option.some(Duration.millis(500))))
-  yield* _(Sharding.registerSingleton(
-    "process-manager",
-    processManager
-  ))
   yield* _(Sharding.registerScoped)
 
   const messenger = yield* _(Sharding.messenger(SampleEntity))
