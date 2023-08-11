@@ -4,15 +4,91 @@
 import * as Data from "@effect/data/Data"
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
-import type * as Queue from "@effect/io/Queue"
-import * as Ref from "@effect/io/Ref"
-import type * as Schema from "@effect/schema/Schema"
-import * as PoisonPill from "@effect/shardcake/PoisonPill"
+import * as Ref from "@effect/io/Ref/Synchronized"
+import * as Schema from "@effect/schema/Schema"
+import type { JsonData } from "@effect/shardcake/JsonData"
 import type * as RecipientType from "@effect/shardcake/RecipientType"
-import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
-import * as SubscriptionRef from "@effect/stream/SubscriptionRef"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
+
+interface EventSourcedArgs<Event, State> {
+  state: State
+  emit: <A extends Array<Event>>(...events: A) => Effect.Effect<never, never, void>
+}
+
+interface EventSourcedEvolveArgs<Event, State> {
+  state: State
+  event: Event
+  entityId: string
+}
+
+interface Projection<State> {
+  version: bigint
+  state: State
+}
+
+export function behaviour<I extends JsonData, Event, State>(
+  entityType: string,
+  eventsSchema: Schema.Schema<I, Event>,
+  initialState: (entityId: string) => State,
+  evolve: (args: EventSourcedEvolveArgs<Event, State>) => State
+) {
+  return (entityId: string) =>
+    <R, E, A>(body: (args: EventSourcedArgs<Event, State>) => Effect.Effect<R, E, A>) =>
+      Effect.gen(function*(_) {
+        const eventStore = yield* _(EventStore.EventStore)
+        const projectionRef = yield* _(
+          Ref.make<Projection<State>>({ version: BigInt(0), state: initialState(entityId) })
+        )
+
+        const updateProjection = Ref.updateAndGetEffect(projectionRef, (currentProjection) =>
+          pipe(
+            eventStore.readStream(entityType, entityId, currentProjection.version),
+            Stream.runFoldEffect(
+              currentProjection,
+              (p, [version, e]) =>
+                Effect.map(
+                  Schema.decode(eventsSchema)(e as any),
+                  (event) => ({ version, state: evolve({ ...p, entityId, event }) })
+                )
+            ),
+            Effect.catchTag("ParseError", () => Effect.succeed(currentProjection))
+          ))
+
+        const makeAppendEvent = (eventsRef: Ref.Synchronized<Array<Event>>) =>
+          (...events: Array<Event>) => Ref.update(eventsRef, (_) => _.concat(Array.from(events)))
+
+        return yield* _(pipe(
+          updateProjection,
+          Effect.flatMap((currentProjection) =>
+            pipe(
+              Ref.make<Array<Event>>([]),
+              Effect.flatMap((eventsRef) =>
+                pipe(
+                  body({ state: currentProjection.state, emit: makeAppendEvent(eventsRef) }),
+                  Effect.tap(() =>
+                    pipe(
+                      Ref.get(eventsRef),
+                      Effect.flatMap((events) => Effect.forEach(events, (_) => Schema.encode(eventsSchema)(_))),
+                      Effect.catchAllCause(Effect.logError),
+                      Effect.flatMap((byteArrays) =>
+                        eventStore.persistEvents(
+                          entityType,
+                          entityId,
+                          currentProjection.version,
+                          byteArrays || []
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          ),
+          Effect.retryWhile(() => false)
+        ))
+      })
+}
 
 /**
  * @since 1.0.0
@@ -45,106 +121,4 @@ export function make<Command, Event>(
   eventsSchema: Schema.Schema<any, Event>
 ): EventSourced<Command, Event> {
   return Data.struct({ _id: TypeId, recipientType, eventsSchema })
-}
-
-interface Projection<State> {
-  version: bigint
-  state: State
-}
-
-interface DecideArgs<Command, Event, State> extends Projection<State> {
-  entityId: string
-  command: Command
-  emit: (events: Iterable<Event>) => Effect.Effect<never, never, void>
-  changes: Stream.Stream<never, never, State>
-}
-
-interface EvolveArgs<Event, State> extends Projection<State> {
-  entityId: string
-  event: Event
-}
-
-export function behaviour<Command, Event>(
-  eventSourced: EventSourced<Command, Event>
-) {
-  return <State, R>(
-    initialState: State,
-    decide: (args: DecideArgs<Command, Event, State>) => Effect.Effect<R, never, void>,
-    evolve: (args: EvolveArgs<Event, State>) => State
-  ) =>
-    (entityId: string, dequeue: Queue.Dequeue<Command | PoisonPill.PoisonPill>) =>
-      Effect.gen(function*(_) {
-        const eventStore = yield* _(EventStore.EventStore)
-        const serialization = yield* _(Serialization.Serialization)
-        const projectionRef = yield* _(
-          SubscriptionRef.make<Projection<State>>({ version: BigInt(0), state: initialState })
-        )
-
-        const changes = projectionRef.changes.pipe(Stream.map((p) => p.state), Stream.changes)
-
-        const updateProjection = pipe(
-          Ref.get(projectionRef),
-          Effect.flatMap((currentProjection) =>
-            pipe(
-              eventStore.readStream(eventSourced.recipientType, entityId, currentProjection.version),
-              Stream.runFoldEffect(
-                currentProjection,
-                (p, e) =>
-                  Effect.map(
-                    serialization.decode(e.body, eventSourced.eventsSchema),
-                    (event) => ({ version: e.version, state: evolve({ ...p, entityId, event }) })
-                  )
-              )
-            )
-          ),
-          Effect.flatMap((_) => Ref.set(projectionRef, _))
-        )
-
-        const makeAppendEvent = (eventsRef: Ref.Ref<Array<Event>>) =>
-          (events: Iterable<Event>) => Ref.update(eventsRef, (_) => _.concat(Array.from(events)))
-
-        const handleCommand = (command: Command) =>
-          pipe(
-            Ref.get(projectionRef),
-            Effect.flatMap((currentProjection) =>
-              pipe(
-                Ref.make<Array<Event>>([]),
-                Effect.flatMap((eventsRef) =>
-                  pipe(
-                    decide({ ...currentProjection, emit: makeAppendEvent(eventsRef), entityId, command, changes }),
-                    Effect.zipRight(Ref.get(eventsRef)),
-                    Effect.flatMap((events) =>
-                      pipe(
-                        Effect.forEach(events, (_) => serialization.encode(_, eventSourced.eventsSchema)),
-                        Effect.flatMap((byteArrays) =>
-                          eventStore.persistEvents(
-                            eventSourced.recipientType,
-                            entityId,
-                            currentProjection.version,
-                            byteArrays
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-
-        return yield* _(pipe(
-          Effect.logInfo(`Warming up entity ${entityId}`),
-          Effect.zipRight(updateProjection),
-          Effect.flatMap((_) =>
-            pipe(
-              PoisonPill.takeOrInterrupt(dequeue),
-              Effect.flatMap(handleCommand),
-              Effect.zipRight(updateProjection),
-              Effect.forever
-            )
-          ),
-          Effect.catchAllCause(Effect.logError),
-          Effect.onInterrupt(() => Effect.logInfo(`Shutting down entity ${entityId}`))
-        ))
-      })
 }

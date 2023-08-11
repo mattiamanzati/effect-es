@@ -6,10 +6,8 @@ import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
 import * as Ref from "@effect/io/Ref"
-import type * as ByteArray from "@effect/shardcake/ByteArray"
-import type * as RecipientType from "@effect/shardcake/RecipientType"
+import type { JsonData } from "@effect/shardcake/JsonData"
 import * as Stream from "@effect/stream/Stream"
-import * as BinaryEvent from "@mattiamanzati/effect-es/BinaryEvent"
 
 /**
  * @since 1.0.0
@@ -29,85 +27,68 @@ export const EventStore = Tag<EventStore>(TypeId)
  */
 export interface EventStore {
   /**
-   * Reads all the events starting from the specified sequence
-   */
-  readJournal(
-    fromSequence: bigint,
-    closeOnEnd: boolean
-  ): Stream.Stream<never, never, BinaryEvent.BinaryEvent>
-
-  /**
    * Reads the events from the entity stream starting from the specified version, closes the stream when there are no more events.
    */
-  readStream<A>(
-    recipientType: RecipientType.RecipientType<A>,
+  readStream(
+    entityType: string,
     entityId: string,
     fromVersion: bigint
-  ): Stream.Stream<never, never, BinaryEvent.BinaryEvent>
+  ): Stream.Stream<never, never, readonly [version: bigint, event: JsonData]>
 
   /**
    * Persists a list of events in a transaction, ensuring sequence is mantained
    */
-  persistEvents<A>(
-    recipientType: RecipientType.RecipientType<A>,
+  persistEvents(
+    entityType: string,
     entityId: string,
     currentVersion: bigint,
-    events: Iterable<ByteArray.ByteArray>
+    events: Iterable<JsonData>
   ): Effect.Effect<never, never, void>
+}
+
+interface InMemoryEntry {
+  entityType: string
+  entityId: string
+  version: bigint
+  body: JsonData
 }
 
 export const inMemory = pipe(
   Effect.gen(function*(_) {
-    const sequenceRef = yield* _(Ref.make(BigInt(1)))
-    const memoryRef = yield* _(Ref.make<Array<BinaryEvent.BinaryEvent>>([]))
+    const memoryRef = yield* _(Ref.make<Array<InMemoryEntry>>([]))
 
-    const readJournal = (fromSequence: bigint) =>
-      pipe(
-        Ref.get(memoryRef),
-        Effect.map((events) => events.filter((e) => e.sequence > fromSequence)),
-        Effect.map((_) => Stream.fromIterable(_)),
-        Stream.flatten()
-      )
-
-    const readStream = <A>(recipientType: RecipientType.RecipientType<A>, entityId: string, fromVersion: bigint) =>
+    const readStream = (entityType: string, entityId: string, fromVersion: bigint) =>
       pipe(
         Ref.get(memoryRef),
         Effect.map((events) =>
-          events.filter((e) =>
-            e.entityType === recipientType.name && e.entityId === entityId && e.version > fromVersion
-          )
+          events.filter((e) => e.entityType === entityType && e.entityId === entityId && e.version > fromVersion)
         ),
-        Effect.map((_) => Stream.fromIterable(_)),
+        Effect.map((_) => pipe(Stream.fromIterable(_), Stream.map((_) => [_.version, _.body] as const))),
         Stream.flatten()
       )
 
-    const persistEvents = <A>(
-      recipientType: RecipientType.RecipientType<A>,
+    const persistEvents = (
+      entityType: string,
       entityId: string,
       fromVersion: bigint,
-      events: Iterable<ByteArray.ByteArray>
+      events: Iterable<JsonData>
     ) =>
       pipe(
         events,
         Effect.forEach((body, idx) =>
-          pipe(
-            Ref.getAndUpdate(sequenceRef, (_) => _ + BigInt(1)),
-            Effect.map((sequence) =>
-              BinaryEvent.make(
-                sequence.toString(),
-                sequence,
-                recipientType.name,
-                entityId,
-                fromVersion + BigInt(1 + idx),
-                body
-              )
-            )
+          Effect.succeed(
+            {
+              entityType,
+              entityId,
+              version: fromVersion + BigInt(1 + idx),
+              body
+            }
           )
         ),
         Effect.flatMap((items) => Ref.update(memoryRef, (_) => _.concat(items)))
       )
 
-    return { readJournal, readStream, persistEvents }
+    return { readStream, persistEvents }
   }),
   Layer.effect(EventStore)
 )

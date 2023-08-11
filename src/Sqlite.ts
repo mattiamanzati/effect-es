@@ -4,6 +4,7 @@ import * as Option from "@effect/data/Option"
 import * as Effect from "@effect/io/Effect"
 import * as Exit from "@effect/io/Exit"
 import * as Layer from "@effect/io/Layer"
+import * as Schema from "@effect/schema/Schema"
 import * as Stream from "@effect/stream/Stream"
 import { default as sqlite3 } from "sqlite3"
 
@@ -92,17 +93,17 @@ function prepare(sql: string, args: Array<(string | number | null)>) {
     ))
 }
 
-export function query(sql: string, args: Array<(string | number | null)>) {
+export function query<I, A>(sql: string, args: Array<(string | number | null)>, schema: Schema.Schema<I, A>) {
   return pipe(
     prepare(sql, args),
     Effect.map((statement) =>
-      Stream.repeatEffectOption(Effect.async<never, Option.Option<void>, unknown>((emit) => {
+      Stream.repeatEffectOption(Effect.async<never, Option.Option<void>, I>((emit) => {
         statement.get((err, row) => {
           if (err) {
             emit(Effect.die(err))
           } else {
             if (row) {
-              emit(Effect.succeed(row))
+              emit(Effect.succeed(row as I))
             } else {
               emit(Effect.fail(Option.none()))
             }
@@ -110,6 +111,7 @@ export function query(sql: string, args: Array<(string | number | null)>) {
         })
       }))
     ),
-    Stream.unwrapScoped
+    Stream.unwrapScoped,
+    Stream.mapEffect(Schema.decode(schema))
   )
 }
