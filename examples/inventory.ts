@@ -27,11 +27,13 @@ export const Command = Schema.union(Increase, Decrease, GetCurrentStock_)
 /* Events */
 const Incremented = Schema.struct({
   _tag: Schema.literal("Incremented"),
+  productId: Schema.string,
   amount: Schema.number
 })
 
 const Decremented = Schema.struct({
   _tag: Schema.literal("Decremented"),
+  productId: Schema.string,
   amount: Schema.number
 })
 
@@ -55,9 +57,9 @@ export const registerEntity = Sharding.registerEntity(InventoryEntityType, (prod
       withState(productId)(({ emit, state }) => {
         switch (msg._tag) {
           case "Increase":
-            return emit({ _tag: "Incremented", amount: msg.amount })
+            return emit({ _tag: "Incremented", productId, amount: msg.amount })
           case "Decrease":
-            return emit({ _tag: "Decremented", amount: msg.amount })
+            return emit({ _tag: "Decremented", productId, amount: msg.amount })
           case "GetCurrentStock":
             return msg.replier.reply(state)
         }

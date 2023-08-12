@@ -14,6 +14,7 @@ import * as Storage from "@effect/shardcake/Storage"
 import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
 import * as Inventory from "./inventory"
 import * as Order from "./order"
+import * as WarnStockSaga from "./warn-stock-saga"
 
 const inMemorySharding = pipe(
   ShardingImpl.live,
@@ -28,6 +29,8 @@ const inMemorySharding = pipe(
 Effect.gen(function*(_) {
   yield* _(Inventory.registerEntity)
   yield* _(Order.registerEntity)
+  yield* _(WarnStockSaga.registerSaga)
+  yield* _(WarnStockSaga.routeEvents)
   yield* _(Sharding.registerScoped)
 
   const messenger = yield* _(Sharding.messenger(Order.OrderEntityType))
@@ -43,5 +46,6 @@ Effect.gen(function*(_) {
   Effect.provideSomeLayer(Serialization.json),
   Effect.scoped,
   Logger.withMinimumLogLevel(LogLevel.All),
+  Effect.catchAllCause(Effect.logError),
   Effect.runPromise
 )

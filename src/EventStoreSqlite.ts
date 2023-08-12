@@ -2,11 +2,10 @@ import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
 import * as Schema from "@effect/schema/Schema"
-import type { JsonData } from "@effect/shardcake/JsonData"
+import * as ByteArray from "@effect/shardcake/ByteArray"
 import * as Stream from "@effect/stream/Stream"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 import * as Sqlite from "@mattiamanzati/effect-es/Sqlite"
-import { jsonDataFromString } from "@mattiamanzati/effect-es/utils"
 
 export const EVENTS_FILE = "events.sqlite3"
 
@@ -29,6 +28,26 @@ export function eventStoreSqlite(fileName: string) {
         Effect.provideSomeLayer(Sqlite.withSqliteConnection(EVENTS_FILE, true))
       ))
 
+      const readJournal = (entityType: string) =>
+        pipe(
+          Sqlite.query(
+            `
+        SELECT 
+          body
+        FROM event_journal 
+        WHERE entityType = ?`,
+            [
+              entityType
+            ],
+            Schema.struct({
+              body: ByteArray.schemaFromString
+            })
+          ),
+          Stream.map((event) => event.body),
+          Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName, false)),
+          Stream.orDie
+        )
+
       const readStream = (entityType: string, entityId: string, fromVersion: bigint) =>
         pipe(
           Sqlite.query(
@@ -47,9 +66,8 @@ export function eventStoreSqlite(fileName: string) {
               entityId,
               String(fromVersion)
             ],
-            Schema.struct({ version: Schema.BigintFromString, body: jsonDataFromString })
+            Schema.struct({ version: Schema.BigintFromString, body: ByteArray.schemaFromString })
           ),
-          Stream.map((row) => [row.version, row.body] as const),
           Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName, false)),
           Stream.orDie
         )
@@ -58,12 +76,12 @@ export function eventStoreSqlite(fileName: string) {
         entityType: string,
         entityId: string,
         fromVersion: bigint,
-        events: Iterable<JsonData>
+        events: Iterable<ByteArray.ByteArray>
       ) =>
         pipe(
           Effect.forEach(events, (event, idx) =>
             pipe(
-              Schema.encode(jsonDataFromString)(event),
+              Schema.encode(ByteArray.schemaFromString)(event),
               Effect.flatMap((body) =>
                 Sqlite.run(
                   "INSERT INTO event_journal (entityType, entityId, version, body) VALUES (?, ?, ?, ?)",
@@ -82,7 +100,7 @@ export function eventStoreSqlite(fileName: string) {
           Effect.asUnit
         )
 
-      return { readStream, persistEvents }
+      return { readJournal, readStream, persistEvents }
     }),
     Layer.effect(EventStore.EventStore)
   )

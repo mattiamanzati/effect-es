@@ -5,9 +5,10 @@ import * as Data from "@effect/data/Data"
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Ref from "@effect/io/Ref/Synchronized"
-import * as Schema from "@effect/schema/Schema"
+import type * as Schema from "@effect/schema/Schema"
 import type { JsonData } from "@effect/shardcake/JsonData"
 import type * as RecipientType from "@effect/shardcake/RecipientType"
+import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 
@@ -37,6 +38,7 @@ export function behaviour<I extends JsonData, Event, State>(
     <R, E, A>(body: (args: EventSourcedArgs<Event, State>) => Effect.Effect<R, E, A>) =>
       Effect.gen(function*(_) {
         const eventStore = yield* _(EventStore.EventStore)
+        const serialization = yield* _(Serialization.Serialization)
         const projectionRef = yield* _(
           Ref.make<Projection<State>>({ version: BigInt(0), state: initialState(entityId) })
         )
@@ -46,13 +48,13 @@ export function behaviour<I extends JsonData, Event, State>(
             eventStore.readStream(entityType, entityId, currentProjection.version),
             Stream.runFoldEffect(
               currentProjection,
-              (p, [version, e]) =>
+              (p, { body, version }) =>
                 Effect.map(
-                  Schema.decode(eventsSchema)(e as any),
+                  serialization.decode(body, eventsSchema),
                   (event) => ({ version, state: evolve({ ...p, entityId, event }) })
                 )
             ),
-            Effect.catchTag("ParseError", () => Effect.succeed(currentProjection))
+            Effect.orDie
           ))
 
         const makeAppendEvent = (eventsRef: Ref.Synchronized<Array<Event>>) =>
@@ -69,7 +71,7 @@ export function behaviour<I extends JsonData, Event, State>(
                   Effect.tap(() =>
                     pipe(
                       Ref.get(eventsRef),
-                      Effect.flatMap((events) => Effect.forEach(events, (_) => Schema.encode(eventsSchema)(_))),
+                      Effect.flatMap((events) => Effect.forEach(events, (_) => serialization.encode(_, eventsSchema))),
                       Effect.catchAllCause(Effect.logError),
                       Effect.flatMap((byteArrays) =>
                         eventStore.persistEvents(

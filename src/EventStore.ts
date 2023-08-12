@@ -6,7 +6,10 @@ import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
 import * as Ref from "@effect/io/Ref"
+import type * as Schema from "@effect/schema/Schema"
+import type * as ByteArray from "@effect/shardcake/ByteArray"
 import type { JsonData } from "@effect/shardcake/JsonData"
+import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
 
 /**
@@ -27,13 +30,20 @@ export const EventStore = Tag<EventStore>(TypeId)
  */
 export interface EventStore {
   /**
+   * Reads all the events from the journal of given type and subscribes to updates.
+   */
+  readJournal(
+    entityType: string
+  ): Stream.Stream<never, never, ByteArray.ByteArray>
+
+  /**
    * Reads the events from the entity stream starting from the specified version, closes the stream when there are no more events.
    */
   readStream(
     entityType: string,
     entityId: string,
     fromVersion: bigint
-  ): Stream.Stream<never, never, readonly [version: bigint, event: JsonData]>
+  ): Stream.Stream<never, never, { version: bigint; body: ByteArray.ByteArray }>
 
   /**
    * Persists a list of events in a transaction, ensuring sequence is mantained
@@ -42,53 +52,65 @@ export interface EventStore {
     entityType: string,
     entityId: string,
     currentVersion: bigint,
-    events: Iterable<JsonData>
+    events: Iterable<ByteArray.ByteArray>
   ): Effect.Effect<never, never, void>
 }
 
-interface InMemoryEntry {
+type InMemoryEntry = {
   entityType: string
   entityId: string
   version: bigint
-  body: JsonData
+  body: ByteArray.ByteArray
+}
+
+export function readJournalAndDecode<I extends JsonData, A>(entityType: string, schema: Schema.Schema<I, A>) {
+  return Effect.gen(function*(_) {
+    const eventStore = yield* _(EventStore)
+    const serialization = yield* _(Serialization.Serialization)
+
+    return pipe(eventStore.readJournal(entityType), Stream.mapEffect((_) => serialization.decode(_, schema)))
+  }).pipe(Stream.unwrap, Stream.orDie)
 }
 
 export const inMemory = pipe(
   Effect.gen(function*(_) {
     const memoryRef = yield* _(Ref.make<Array<InMemoryEntry>>([]))
 
+    const readJournal = (entityType: string) =>
+      pipe(
+        Ref.get(memoryRef),
+        Effect.map(Stream.fromIterable),
+        Stream.flatten(),
+        Stream.filter((event) => event.entityType === entityType),
+        Stream.map((event) => event.body)
+      )
+
     const readStream = (entityType: string, entityId: string, fromVersion: bigint) =>
       pipe(
         Ref.get(memoryRef),
-        Effect.map((events) =>
-          events.filter((e) => e.entityType === entityType && e.entityId === entityId && e.version > fromVersion)
+        Effect.map(Stream.fromIterable),
+        Stream.flatten(),
+        Stream.filter((event) =>
+          event.entityType === entityType && event.entityId === entityId && event.version > fromVersion
         ),
-        Effect.map((_) => pipe(Stream.fromIterable(_), Stream.map((_) => [_.version, _.body] as const))),
-        Stream.flatten()
+        Stream.map((event) => ({ version: event.version, body: event.body }))
       )
 
     const persistEvents = (
       entityType: string,
       entityId: string,
       fromVersion: bigint,
-      events: Iterable<JsonData>
+      events: Iterable<ByteArray.ByteArray>
     ) =>
       pipe(
         events,
         Effect.forEach((body, idx) =>
-          Effect.succeed(
-            {
-              entityType,
-              entityId,
-              version: fromVersion + BigInt(1 + idx),
-              body
-            }
-          )
+          Effect.succeed({ entityType, entityId, version: fromVersion + BigInt(1 + idx), body })
         ),
         Effect.flatMap((items) => Ref.update(memoryRef, (_) => _.concat(items)))
       )
 
-    return { readStream, persistEvents }
+    return { readJournal, readStream, persistEvents }
   }),
   Layer.effect(EventStore)
 )

@@ -97,7 +97,7 @@ export function query<I, A>(sql: string, args: Array<(string | number | null)>, 
   return pipe(
     prepare(sql, args),
     Effect.map((statement) =>
-      Stream.repeatEffectOption(Effect.async<never, Option.Option<void>, I>((emit) => {
+      Stream.repeatEffectOption(Effect.async<never, Option.Option<never>, I>((emit) => {
         statement.get((err, row) => {
           if (err) {
             emit(Effect.die(err))

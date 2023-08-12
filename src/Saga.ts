@@ -5,10 +5,11 @@ import type * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Sharding from "@effect/shardcake/Sharding"
 import * as Stream from "@effect/stream/Stream"
 
-export function register<Msg>(
-  sagaRecipientType: RecipientType.EntityType<Msg>
+export function createSagaRouter<Msg>(
+  sagaRecipientType: RecipientType.EntityType<Msg>,
+  eventToSagaId: (event: Msg) => Option.Option<string>
 ) {
-  return <R>(eventToSagaId: (event: Msg) => Option.Option<string>, stream: Stream.Stream<R, never, Msg>) => {
+  return <R>(stream: Stream.Stream<R, never, Msg>) => {
     const behaviour = pipe(
       stream,
       Stream.mapEffect((event) =>

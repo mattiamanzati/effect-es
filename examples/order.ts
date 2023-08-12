@@ -41,12 +41,14 @@ export const Command = Schema.union(PlaceOrder, ShipProduct, GetOrderStatus)
 /* Events */
 const OrderPlaced = Schema.struct({
   _tag: Schema.literal("OrderPlaced"),
+  orderId: Schema.string,
   productId: Schema.string,
   amount: Schema.number
 })
 
 const ProductShipped = Schema.struct({
   _tag: Schema.literal("ProductShipped"),
+  orderId: Schema.string,
   productId: Schema.string,
   amount: Schema.number
 })
@@ -86,16 +88,16 @@ const withState = EventSourced.behaviour(OrderEntityType.name, Event, () => [] a
   }
 })
 
-export const registerEntity = Sharding.registerEntity(OrderEntityType, (productId, dequeue) =>
+export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId, dequeue) =>
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
     Effect.flatMap((msg) =>
-      withState(productId)(({ emit, state }) => {
+      withState(orderId)(({ emit, state }) => {
         switch (msg._tag) {
           case "PlaceOrder":
-            return emit({ _tag: "OrderPlaced", productId: msg.productId, amount: msg.amount })
+            return emit({ _tag: "OrderPlaced", orderId, productId: msg.productId, amount: msg.amount })
           case "ShipProduct":
-            return emit({ _tag: "ProductShipped", productId: msg.productId, amount: msg.amount })
+            return emit({ _tag: "ProductShipped", orderId, productId: msg.productId, amount: msg.amount })
           case "GetOrderStatus":
             return msg.replier.reply(state)
         }
