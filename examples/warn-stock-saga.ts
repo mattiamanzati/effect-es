@@ -21,13 +21,12 @@ const eventStream = pipe(
   Stream.merge(EventStore.readJournalAndDecode(Order.OrderEntityType.name, Order.Event))
 )
 
-export const routeEvents = Saga.createSagaRouter(WarnStockSagaType, (event) => Option.some(event.productId))(
+export const routeEvents = Saga.createSagaRouter(WarnStockSagaType, (event) => Option.some(event.body.productId))(
   eventStream
 )
 
 export const registerSaga = Sharding.registerEntity(WarnStockSagaType, (sagaId, dequeue) =>
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
-    Effect.tap((msg) => Effect.sync(() => console.log(msg))),
     Effect.forever
   ))

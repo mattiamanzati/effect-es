@@ -7,20 +7,21 @@ import * as Message from "@effect/shardcake/Message"
 import * as PoisonPill from "@effect/shardcake/PoisonPill"
 import * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Sharding from "@effect/shardcake/Sharding"
+import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 import * as EventSourced from "@mattiamanzati/effect-es/EventSourced"
 
 /* Commands */
-const PlaceOrder = Schema.struct({
+const PlaceOrder = Envelope.schema(Schema.struct({
   _tag: Schema.literal("PlaceOrder"),
   productId: Schema.string,
   amount: Schema.number
-})
+}))
 
-const ShipProduct = Schema.struct({
+const ShipProduct = Envelope.schema(Schema.struct({
   _tag: Schema.literal("ShipProduct"),
   productId: Schema.string,
   amount: Schema.number
-})
+}))
 
 const OrderStatusLine = Schema.struct({
   productId: Schema.string,
@@ -32,56 +33,57 @@ type OrderStatusLine = Schema.To<typeof OrderStatusLine>
 const OrderStatus = Schema.array(OrderStatusLine)
 type OrderStatus = Schema.To<typeof OrderStatus>
 
-export const [GetOrderStatus, GetOrderStatus_] = Message.schema(OrderStatus)(Schema.struct({
+export const [GetOrderStatus, GetOrderStatus_] = Message.schema(OrderStatus)(Envelope.schema(Schema.struct({
   _tag: Schema.literal("GetOrderStatus")
-}))
+})))
 
-export const Command = Schema.union(PlaceOrder, ShipProduct, GetOrderStatus)
+export const Command = (Schema.union(PlaceOrder, ShipProduct, GetOrderStatus))
 
 /* Events */
-const OrderPlaced = Schema.struct({
+const OrderPlaced = Envelope.schema(Schema.struct({
   _tag: Schema.literal("OrderPlaced"),
   orderId: Schema.string,
   productId: Schema.string,
   amount: Schema.number
-})
+}))
 
-const ProductShipped = Schema.struct({
+const ProductShipped = Envelope.schema(Schema.struct({
   _tag: Schema.literal("ProductShipped"),
   orderId: Schema.string,
   productId: Schema.string,
   amount: Schema.number
-})
+}))
 
-export const Event = Schema.union(OrderPlaced, ProductShipped)
+export const Event = (Schema.union(OrderPlaced, ProductShipped))
 
 export const OrderEntityType = RecipientType.makeEntityType("Order", Command)
 
 const withState = EventSourced.behaviour(OrderEntityType.name, Event, () => [] as OrderStatus, ({ event, state }) => {
-  switch (event._tag) {
+  const body = event.body
+  switch (body._tag) {
     case "OrderPlaced":
       return pipe(
         state,
-        ReadonlyArray.filter((row) => row.productId !== event.productId),
+        ReadonlyArray.filter((row) => row.productId !== body.productId),
         ReadonlyArray.append(pipe(
           state,
-          ReadonlyArray.findFirst((row) => row.productId === event.productId),
+          ReadonlyArray.findFirst((row) => row.productId === body.productId),
           Option.match({
-            onNone: () => ({ productId: event.productId, amount: event.amount, shipped: 0 }) as OrderStatusLine,
-            onSome: (row) => ({ ...row, amount: row.amount + event.amount })
+            onNone: () => ({ productId: body.productId, amount: body.amount, shipped: 0 }) as OrderStatusLine,
+            onSome: (row) => ({ ...row, amount: row.amount + body.amount })
           })
         ))
       )
     case "ProductShipped":
       return pipe(
         state,
-        ReadonlyArray.filter((row) => row.productId !== event.productId),
+        ReadonlyArray.filter((row) => row.productId !== body.productId),
         ReadonlyArray.append(pipe(
           state,
-          ReadonlyArray.findFirst((row) => row.productId === event.productId),
+          ReadonlyArray.findFirst((row) => row.productId === body.productId),
           Option.match({
-            onNone: () => ({ productId: event.productId, amount: 0, shipped: event.amount }) as OrderStatusLine,
-            onSome: (row) => ({ ...row, shipped: row.amount + event.amount })
+            onNone: () => ({ productId: body.productId, amount: 0, shipped: body.amount }) as OrderStatusLine,
+            onSome: (row) => ({ ...row, shipped: row.amount + body.amount })
           })
         ))
       )
@@ -92,16 +94,19 @@ export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId,
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
     Effect.flatMap((msg) =>
-      withState(orderId)(({ emit, state }) => {
-        switch (msg._tag) {
-          case "PlaceOrder":
-            return emit({ _tag: "OrderPlaced", orderId, productId: msg.productId, amount: msg.amount })
-          case "ShipProduct":
-            return emit({ _tag: "ProductShipped", orderId, productId: msg.productId, amount: msg.amount })
-          case "GetOrderStatus":
-            return msg.replier.reply(state)
-        }
-      })
+      Envelope.process(msg)((envelope) =>
+        withState(orderId)(({ emit, state }) =>
+          Envelope.matchTag(msg)({
+            PlaceOrder: (msg) =>
+              emit(envelope({ _tag: "OrderPlaced", orderId, productId: msg.body.productId, amount: msg.body.amount })),
+            ShipProduct: (msg) =>
+              emit(
+                envelope({ _tag: "ProductShipped", orderId, productId: msg.body.productId, amount: msg.body.amount })
+              ),
+            GetOrderStatus: (msg) => msg.replier.reply(state)
+          })
+        )
+      )
     ),
     Effect.forever
   ))

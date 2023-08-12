@@ -1,3 +1,4 @@
+import * as Duration from "@effect/data/Duration"
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
@@ -11,6 +12,7 @@ import * as ShardingConfig from "@effect/shardcake/ShardingConfig"
 import * as ShardingImpl from "@effect/shardcake/ShardingImpl"
 import * as ShardManagerClient from "@effect/shardcake/ShardManagerClient"
 import * as Storage from "@effect/shardcake/Storage"
+import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
 import * as Inventory from "./inventory"
 import * as Order from "./order"
@@ -35,11 +37,13 @@ Effect.gen(function*(_) {
 
   const messenger = yield* _(Sharding.messenger(Order.OrderEntityType))
 
-  yield* _(messenger.sendDiscard("order1")({ _tag: "PlaceOrder", productId: "product1", amount: 10 }))
-  yield* _(messenger.sendDiscard("order1")({ _tag: "PlaceOrder", productId: "product2", amount: 8 }))
+  yield* _(messenger.sendDiscard("order1")(Envelope.make({ _tag: "PlaceOrder", productId: "product1", amount: 10 })))
+  yield* _(messenger.sendDiscard("order1")(Envelope.make({ _tag: "PlaceOrder", productId: "product2", amount: 8 })))
 
-  const current = yield* _(messenger.send("order1")(Order.GetOrderStatus_({ _tag: "GetOrderStatus" })))
+  const current = yield* _(messenger.send("order1")(Order.GetOrderStatus_(Envelope.make({ _tag: "GetOrderStatus" }))))
   yield* _(Effect.logInfo(`Order status is ${JSON.stringify(current)}`))
+
+  yield* _(Effect.sleep(Duration.millis(10000)))
 }).pipe(
   Effect.provideSomeLayer(inMemorySharding),
   Effect.provideSomeLayer(EventStoreSqlite.eventStoreSqlite("events.sqlite3")),
