@@ -1,6 +1,7 @@
 /**
  * @since 1.0.0
  */
+import { Tag } from "@effect/data/Context"
 import * as Data from "@effect/data/Data"
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
@@ -11,11 +12,6 @@ import type * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
-
-interface EventSourcedArgs<Event, State> {
-  state: State
-  emit: <A extends Array<Event>>(...events: A) => Effect.Effect<never, never, void>
-}
 
 interface EventSourcedEvolveArgs<Event, State> {
   state: State
@@ -28,14 +24,31 @@ interface Projection<State> {
   state: State
 }
 
+export interface UncommittedEvents {
+  currentProjection: Projection<any>
+  eventsRef: Ref.Synchronized<any>
+}
+const UncommittedEvents = Tag<UncommittedEvents>()
+
 export function behaviour<I extends JsonData, Event, State>(
   entityType: string,
   eventsSchema: Schema.Schema<I, Event>,
   initialState: (entityId: string) => State,
   evolve: (args: EventSourcedEvolveArgs<Event, State>) => State
 ) {
-  return (entityId: string) =>
-    <R, E, A>(body: (args: EventSourcedArgs<Event, State>) => Effect.Effect<R, E, A>) =>
+  const emit = (...newEvents: Array<Event>) =>
+    pipe(
+      UncommittedEvents,
+      Effect.flatMap((_) => Ref.update(_.eventsRef, (events) => events.concat(newEvents)))
+    )
+
+  const state = pipe(
+    UncommittedEvents,
+    Effect.map((_) => _.currentProjection.state as State)
+  )
+
+  const eventTransaction = (entityId: string) =>
+    <R, E, A>(body: Effect.Effect<R | UncommittedEvents, E, A>) =>
       Effect.gen(function*(_) {
         const eventStore = yield* _(EventStore.EventStore)
         const serialization = yield* _(Serialization.Serialization)
@@ -57,9 +70,6 @@ export function behaviour<I extends JsonData, Event, State>(
             Effect.orDie
           ))
 
-        const makeAppendEvent = (eventsRef: Ref.Synchronized<Array<Event>>) =>
-          (...events: Array<Event>) => Ref.update(eventsRef, (_) => _.concat(Array.from(events)))
-
         return yield* _(pipe(
           updateProjection,
           Effect.flatMap((currentProjection) =>
@@ -67,7 +77,7 @@ export function behaviour<I extends JsonData, Event, State>(
               Ref.make<Array<Event>>([]),
               Effect.flatMap((eventsRef) =>
                 pipe(
-                  body({ state: currentProjection.state, emit: makeAppendEvent(eventsRef) }),
+                  Effect.provideService(body, UncommittedEvents, { currentProjection, eventsRef }),
                   Effect.tap(() =>
                     pipe(
                       Ref.get(eventsRef),
@@ -90,6 +100,8 @@ export function behaviour<I extends JsonData, Event, State>(
           Effect.retryWhile(() => false)
         ))
       })
+
+  return { emit, state, eventTransaction }
 }
 
 /**

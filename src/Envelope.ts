@@ -44,8 +44,10 @@ export function make<A>(body: A): Envelope<A> {
   })
 }
 
-export function matchTag<A extends Envelope<{ _tag: PropertyKey }>>(msg: A): <B>(
-  cases: { [Tag in A["body"]["_tag"]]: (body: Extract<A, Envelope<{ _tag: Tag }>>) => B }
-) => B {
+export function matchTag<A extends Envelope<{ _tag: PropertyKey }>>(
+  msg: A
+): <F extends { [Tag in A["body"]["_tag"]]: (body: Extract<A, Envelope<{ _tag: Tag }>>) => any }>(
+  cases: F
+) => ReturnType<F[keyof F]> {
   return (cases) => (cases as any)[msg.body._tag](msg)
 }

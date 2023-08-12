@@ -43,28 +43,31 @@ export const Event = Envelope.schema(Schema.union(Incremented, Decremented))
 
 export const InventoryEntityType = RecipientType.makeEntityType("Inventory", Command)
 
-const withState = EventSourced.behaviour(InventoryEntityType.name, Event, () => 0, ({ event, state }) => {
-  const body = event.body
-  switch (body._tag) {
-    case "Incremented":
-      return state + body.amount
-    case "Decremented":
-      return state + body.amount
+const { emit, eventTransaction, state } = EventSourced.behaviour(
+  InventoryEntityType.name,
+  Event,
+  () => 0,
+  ({ event, state }) => {
+    const body = event.body
+    switch (body._tag) {
+      case "Incremented":
+        return state + body.amount
+      case "Decremented":
+        return state + body.amount
+    }
   }
-})
+)
 
 export const registerEntity = Sharding.registerEntity(InventoryEntityType, (productId, dequeue) =>
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
-    Effect.flatMap((msg) =>
-      Envelope.process(msg)((envelope) =>
-        withState(productId)(({ emit, state }) =>
-          Envelope.matchTag(msg)({
-            Increase: (body) => emit(envelope({ _tag: "Incremented", productId, amount: body.body.amount })),
-            Decrease: (body) => emit(envelope({ _tag: "Incremented", productId, amount: body.body.amount })),
-            GetCurrentStock: (body) => body.replier.reply(state)
-          })
-        )
+    Effect.flatMap((command) =>
+      Envelope.process(command)((envelope) =>
+        Envelope.matchTag(command)({
+          Increase: (body) => emit(envelope({ _tag: "Incremented", productId, amount: body.body.amount })),
+          Decrease: (body) => emit(envelope({ _tag: "Incremented", productId, amount: body.body.amount })),
+          GetCurrentStock: (body) => Effect.flatMap(state, body.replier.reply)
+        }).pipe(Effect.unified, eventTransaction(productId))
       )
     ),
     Effect.forever

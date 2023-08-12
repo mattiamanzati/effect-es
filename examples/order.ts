@@ -58,54 +58,59 @@ export const Event = (Schema.union(OrderPlaced, ProductShipped))
 
 export const OrderEntityType = RecipientType.makeEntityType("Order", Command)
 
-const withState = EventSourced.behaviour(OrderEntityType.name, Event, () => [] as OrderStatus, ({ event, state }) => {
-  const body = event.body
-  switch (body._tag) {
-    case "OrderPlaced":
-      return pipe(
-        state,
-        ReadonlyArray.filter((row) => row.productId !== body.productId),
-        ReadonlyArray.append(pipe(
+const OrderJournal = EventSourced.behaviour(
+  OrderEntityType.name,
+  Event,
+  () => [] as OrderStatus,
+  ({ event, state }) => {
+    const body = event.body
+    switch (body._tag) {
+      case "OrderPlaced":
+        return pipe(
           state,
-          ReadonlyArray.findFirst((row) => row.productId === body.productId),
-          Option.match({
-            onNone: () => ({ productId: body.productId, amount: body.amount, shipped: 0 }) as OrderStatusLine,
-            onSome: (row) => ({ ...row, amount: row.amount + body.amount })
-          })
-        ))
-      )
-    case "ProductShipped":
-      return pipe(
-        state,
-        ReadonlyArray.filter((row) => row.productId !== body.productId),
-        ReadonlyArray.append(pipe(
+          ReadonlyArray.filter((row) => row.productId !== body.productId),
+          ReadonlyArray.append(pipe(
+            state,
+            ReadonlyArray.findFirst((row) => row.productId === body.productId),
+            Option.match({
+              onNone: () => ({ productId: body.productId, amount: body.amount, shipped: 0 }) as OrderStatusLine,
+              onSome: (row) => ({ ...row, amount: row.amount + body.amount })
+            })
+          ))
+        )
+      case "ProductShipped":
+        return pipe(
           state,
-          ReadonlyArray.findFirst((row) => row.productId === body.productId),
-          Option.match({
-            onNone: () => ({ productId: body.productId, amount: 0, shipped: body.amount }) as OrderStatusLine,
-            onSome: (row) => ({ ...row, shipped: row.amount + body.amount })
-          })
-        ))
-      )
+          ReadonlyArray.filter((row) => row.productId !== body.productId),
+          ReadonlyArray.append(pipe(
+            state,
+            ReadonlyArray.findFirst((row) => row.productId === body.productId),
+            Option.match({
+              onNone: () => ({ productId: body.productId, amount: 0, shipped: body.amount }) as OrderStatusLine,
+              onSome: (row) => ({ ...row, shipped: row.amount + body.amount })
+            })
+          ))
+        )
+    }
   }
-})
+)
 
 export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId, dequeue) =>
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
     Effect.flatMap((msg) =>
       Envelope.process(msg)((envelope) =>
-        withState(orderId)(({ emit, state }) =>
-          Envelope.matchTag(msg)({
-            PlaceOrder: (msg) =>
-              emit(envelope({ _tag: "OrderPlaced", orderId, productId: msg.body.productId, amount: msg.body.amount })),
-            ShipProduct: (msg) =>
-              emit(
-                envelope({ _tag: "ProductShipped", orderId, productId: msg.body.productId, amount: msg.body.amount })
-              ),
-            GetOrderStatus: (msg) => msg.replier.reply(state)
-          })
-        )
+        Envelope.matchTag(msg)({
+          PlaceOrder: (msg) =>
+            OrderJournal.emit(
+              envelope({ _tag: "OrderPlaced", orderId, productId: msg.body.productId, amount: msg.body.amount })
+            ),
+          ShipProduct: (msg) =>
+            OrderJournal.emit(
+              envelope({ _tag: "ProductShipped", orderId, productId: msg.body.productId, amount: msg.body.amount })
+            ),
+          GetOrderStatus: (msg) => pipe(OrderJournal.state, Effect.flatMap(msg.replier.reply))
+        }).pipe(Effect.unified, OrderJournal.eventTransaction(orderId))
       )
     ),
     Effect.forever
