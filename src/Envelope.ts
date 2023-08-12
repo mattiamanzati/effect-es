@@ -54,9 +54,13 @@ export function make<const A>(body: A) {
 
 export function makeRelated<const A>(body: A){
   return Effect.gen(function*(_){
+    const originating = yield* _(OriginatingEnvelope)
     const base = yield* _(make(body))
 
-    const result: Envelope<A> = ({...base})
+    const result: Envelope<A> = ({...base, 
+      causationId: Option.some(originating.envelope.id), 
+      correlationId: Option.orElse(originating.envelope.correlationId, () => Option.some(originating.envelope.id))
+    })
 
     return result
   })
