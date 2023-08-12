@@ -23,8 +23,10 @@ export const [GetCurrentStock_, GetCurrentStock] = Message.schema(Schema.number)
   _tag: Schema.literal("GetCurrentStock")
 })))
 
-export const Command = (Schema.union(Increase, Decrease, GetCurrentStock_))
+export const Command = Schema.union(Increase, Decrease, GetCurrentStock_)
 export type Command = Schema.To<typeof Command>
+
+export const InventoryEntityType = RecipientType.makeEntityType("Inventory", Command)
 
 /* Events */
 const Incremented = Envelope.schema(Schema.struct({
@@ -41,8 +43,6 @@ const Decremented = Envelope.schema(Schema.struct({
 
 export const Event = Schema.union(Incremented, Decremented)
 
-export const InventoryEntityType = RecipientType.makeEntityType("Inventory", Command)
-
 const InventoryJournal = EventSourced.make(
   InventoryEntityType.name,
   Event,
@@ -53,7 +53,7 @@ const InventoryJournal = EventSourced.make(
       case "Incremented":
         return state + body.amount
       case "Decremented":
-        return state + body.amount
+        return state - body.amount
     }
   }
 )
@@ -66,12 +66,14 @@ export const registerEntity = Sharding.registerEntity(InventoryEntityType, (prod
         Increase: (body) =>
           pipe(
             Envelope.makeRelated({ _tag: "Incremented", productId, amount: body.body.amount }),
-            Effect.flatMap(InventoryJournal.append)
+            Effect.flatMap(InventoryJournal.append),
+            Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " increasing by " + body.body.amount))
           ),
         Decrease: (body) =>
           pipe(
-            Envelope.makeRelated({ _tag: "Incremented", productId, amount: body.body.amount }),
-            Effect.flatMap(InventoryJournal.append)
+            Envelope.makeRelated({ _tag: "Decremented", productId, amount: body.body.amount }),
+            Effect.flatMap(InventoryJournal.append),
+            Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " decreasing by " + body.body.amount))
           ),
         GetCurrentStock: (body) => Effect.flatMap(InventoryJournal.currentState, body.replier.reply)
       }).pipe(Effect.unified, InventoryJournal.commitOrRetry(productId), Envelope.withOriginatingEnvelope(command))

@@ -38,6 +38,9 @@ export const [GetOrderStatus, GetOrderStatus_] = Message.schema(OrderStatus)(Env
 })))
 
 export const Command = (Schema.union(PlaceOrder, ShipProduct, GetOrderStatus))
+export type Command = Schema.To<typeof Command>
+
+export const OrderEntityType = RecipientType.makeEntityType("Order", Command)
 
 /* Events */
 const OrderPlaced = Envelope.schema(Schema.struct({
@@ -55,8 +58,6 @@ const ProductShipped = Envelope.schema(Schema.struct({
 }))
 
 export const Event = (Schema.union(OrderPlaced, ProductShipped))
-
-export const OrderEntityType = RecipientType.makeEntityType("Order", Command)
 
 const OrderJournal = EventSourced.make(
   OrderEntityType.name,
@@ -108,7 +109,8 @@ export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId,
               productId: msg.body.productId,
               amount: msg.body.amount
             }),
-            Effect.flatMap(OrderJournal.append)
+            Effect.flatMap(OrderJournal.append),
+            Effect.zipLeft(Effect.logInfo("Adding " + msg.body.amount + " of " + msg.body.productId + " to " + orderId))
           ),
         ShipProduct: (msg) =>
           pipe(
@@ -118,7 +120,10 @@ export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId,
               productId: msg.body.productId,
               amount: msg.body.amount
             }),
-            Effect.flatMap(OrderJournal.append)
+            Effect.flatMap(OrderJournal.append),
+            Effect.zipLeft(
+              Effect.logInfo("Shipping " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
+            )
           ),
         GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
       }).pipe(Effect.unified, OrderJournal.commitOrRetry(orderId), Envelope.withOriginatingEnvelope(command))
