@@ -37,10 +37,14 @@ Effect.gen(function*(_) {
 
   const messenger = yield* _(Sharding.messenger(Order.OrderEntityType))
 
-  yield* _(messenger.sendDiscard("order1")(Envelope.make({ _tag: "PlaceOrder", productId: "product1", amount: 10 })))
-  yield* _(messenger.sendDiscard("order1")(Envelope.make({ _tag: "PlaceOrder", productId: "product2", amount: 8 })))
+  const msg1 = yield* _(Envelope.make({ _tag: "PlaceOrder", productId: "product1", amount: 10 }))
+  yield* _(messenger.sendDiscard("order1")(msg1))
 
-  const current = yield* _(messenger.send("order1")(Order.GetOrderStatus_(Envelope.make({ _tag: "GetOrderStatus" }))))
+  const msg2 = yield* _(Envelope.make({ _tag: "PlaceOrder", productId: "product2", amount: 8 }))
+  yield* _(messenger.sendDiscard("order1")(msg2))
+
+  const msg3 = yield* _(Envelope.make({ _tag: "GetOrderStatus" }))
+  const current = yield* _(messenger.send("order1")(Order.GetOrderStatus_(msg3)))
   yield* _(Effect.logInfo(`Order status is ${JSON.stringify(current)}`))
 
   yield* _(Effect.sleep(Duration.millis(10000)))

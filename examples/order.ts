@@ -58,7 +58,7 @@ export const Event = (Schema.union(OrderPlaced, ProductShipped))
 
 export const OrderEntityType = RecipientType.makeEntityType("Order", Command)
 
-const OrderJournal = EventSourced.behaviour(
+const OrderJournal = EventSourced.make(
   OrderEntityType.name,
   Event,
   () => [] as OrderStatus,
@@ -98,20 +98,30 @@ const OrderJournal = EventSourced.behaviour(
 export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId, dequeue) =>
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
-    Effect.flatMap((msg) =>
-      Envelope.process(msg)((envelope) =>
-        Envelope.matchTag(msg)({
-          PlaceOrder: (msg) =>
-            OrderJournal.emit(
-              envelope({ _tag: "OrderPlaced", orderId, productId: msg.body.productId, amount: msg.body.amount })
-            ),
-          ShipProduct: (msg) =>
-            OrderJournal.emit(
-              envelope({ _tag: "ProductShipped", orderId, productId: msg.body.productId, amount: msg.body.amount })
-            ),
-          GetOrderStatus: (msg) => pipe(OrderJournal.state, Effect.flatMap(msg.replier.reply))
-        }).pipe(Effect.unified, OrderJournal.eventTransaction(orderId))
-      )
+    Effect.flatMap((command) =>
+      Envelope.matchTag(command)({
+        PlaceOrder: (msg) =>
+          pipe(
+            Envelope.makeRelated({
+              _tag: "OrderPlaced",
+              orderId,
+              productId: msg.body.productId,
+              amount: msg.body.amount
+            }),
+            Effect.flatMap(OrderJournal.append)
+          ),
+        ShipProduct: (msg) =>
+          pipe(
+            Envelope.makeRelated({
+              _tag: "ProductShipped",
+              orderId,
+              productId: msg.body.productId,
+              amount: msg.body.amount
+            }),
+            Effect.flatMap(OrderJournal.append)
+          ),
+        GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
+      }).pipe(Effect.unified, OrderJournal.commitOrRetry(orderId), Envelope.withOriginatingEnvelope(command))
     ),
     Effect.forever
   ))

@@ -27,23 +27,23 @@ export const Command = (Schema.union(Increase, Decrease, GetCurrentStock_))
 export type Command = Schema.To<typeof Command>
 
 /* Events */
-const Incremented = Schema.struct({
+const Incremented = Envelope.schema(Schema.struct({
   _tag: Schema.literal("Incremented"),
   productId: Schema.string,
   amount: Schema.number
-})
+}))
 
-const Decremented = Schema.struct({
+const Decremented = Envelope.schema(Schema.struct({
   _tag: Schema.literal("Decremented"),
   productId: Schema.string,
   amount: Schema.number
-})
+}))
 
-export const Event = Envelope.schema(Schema.union(Incremented, Decremented))
+export const Event = Schema.union(Incremented, Decremented)
 
 export const InventoryEntityType = RecipientType.makeEntityType("Inventory", Command)
 
-const { emit, eventTransaction, state } = EventSourced.behaviour(
+const InventoryJournal = EventSourced.make(
   InventoryEntityType.name,
   Event,
   () => 0,
@@ -62,13 +62,19 @@ export const registerEntity = Sharding.registerEntity(InventoryEntityType, (prod
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
     Effect.flatMap((command) =>
-      Envelope.process(command)((envelope) =>
-        Envelope.matchTag(command)({
-          Increase: (body) => emit(envelope({ _tag: "Incremented", productId, amount: body.body.amount })),
-          Decrease: (body) => emit(envelope({ _tag: "Incremented", productId, amount: body.body.amount })),
-          GetCurrentStock: (body) => Effect.flatMap(state, body.replier.reply)
-        }).pipe(Effect.unified, eventTransaction(productId))
-      )
+      Envelope.matchTag(command)({
+        Increase: (body) =>
+          pipe(
+            Envelope.makeRelated({ _tag: "Incremented", productId, amount: body.body.amount }),
+            Effect.flatMap(InventoryJournal.append)
+          ),
+        Decrease: (body) =>
+          pipe(
+            Envelope.makeRelated({ _tag: "Incremented", productId, amount: body.body.amount }),
+            Effect.flatMap(InventoryJournal.append)
+          ),
+        GetCurrentStock: (body) => Effect.flatMap(InventoryJournal.currentState, body.replier.reply)
+      }).pipe(Effect.unified, InventoryJournal.commitOrRetry(productId), Envelope.withOriginatingEnvelope(command))
     ),
     Effect.forever
   ))

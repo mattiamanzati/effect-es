@@ -2,13 +2,11 @@
  * @since 1.0.0
  */
 import { Tag } from "@effect/data/Context"
-import * as Data from "@effect/data/Data"
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Ref from "@effect/io/Ref/Synchronized"
 import type * as Schema from "@effect/schema/Schema"
 import type { JsonData } from "@effect/shardcake/JsonData"
-import type * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
@@ -30,24 +28,24 @@ export interface UncommittedEvents {
 }
 const UncommittedEvents = Tag<UncommittedEvents>()
 
-export function behaviour<I extends JsonData, Event, State>(
+export function make<I extends JsonData, Event, State>(
   entityType: string,
   eventsSchema: Schema.Schema<I, Event>,
   initialState: (entityId: string) => State,
   evolve: (args: EventSourcedEvolveArgs<Event, State>) => State
 ) {
-  const emit = (...newEvents: Array<Event>) =>
+  const append = (...newEvents: Array<Event>) =>
     pipe(
       UncommittedEvents,
       Effect.flatMap((_) => Ref.update(_.eventsRef, (events) => events.concat(newEvents)))
     )
 
-  const state = pipe(
+  const currentState = pipe(
     UncommittedEvents,
     Effect.map((_) => _.currentProjection.state as State)
   )
 
-  const eventTransaction = (entityId: string) =>
+  const commitOrRetry = (entityId: string) =>
     <R, E, A>(body: Effect.Effect<R | UncommittedEvents, E, A>) =>
       Effect.gen(function*(_) {
         const eventStore = yield* _(EventStore.EventStore)
@@ -101,38 +99,5 @@ export function behaviour<I extends JsonData, Event, State>(
         ))
       })
 
-  return { emit, state, eventTransaction }
-}
-
-/**
- * @since 1.0.0
- * @category symbols
- */
-export const TypeId = "@mattiamanzati/effect-es/EventSourced"
-
-/**
- * @since 1.0.0
- * @category symbols
- */
-export type TypeId = typeof TypeId
-
-/**
- * @since 1.0.0
- * @category models
- */
-export interface EventSourced<Command, Event> {
-  _id: TypeId
-  recipientType: RecipientType.RecipientType<Command>
-  eventsSchema: Schema.Schema<any, Event>
-}
-
-/**
- * @since 1.0.0
- * @category constructors
- */
-export function make<Command, Event>(
-  recipientType: RecipientType.RecipientType<Command>,
-  eventsSchema: Schema.Schema<any, Event>
-): EventSourced<Command, Event> {
-  return Data.struct({ _id: TypeId, recipientType, eventsSchema })
+  return { append, currentState, commitOrRetry }
 }
