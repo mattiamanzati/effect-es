@@ -39,24 +39,24 @@ Effect.gen(function*(_) {
   const inventoryMessenger = yield* _(Sharding.messenger(Inventory.InventoryEntityType))
 
   // add first line order
-  const msg1 = yield* _(Envelope.make({ _tag: "PlaceOrder", productId: "product1", amount: 10 }))
+  const msg1 = yield* _(Envelope.makeEffect({ _tag: "PlaceOrder", productId: "product1", amount: 10 }))
   yield* _(orderMessenger.sendDiscard("order1")(msg1))
 
   // add second line order
-  const msg2 = yield* _(Envelope.make({ _tag: "PlaceOrder", productId: "product2", amount: 8 }))
+  const msg2 = yield* _(Envelope.makeEffect({ _tag: "PlaceOrder", productId: "product2", amount: 8 }))
   yield* _(orderMessenger.sendDiscard("order1")(msg2))
 
   // loh current status
-  const msg3 = yield* _(Envelope.make({ _tag: "GetOrderStatus" }))
+  const msg3 = yield* _(Envelope.makeEffect({ _tag: "GetOrderStatus" }))
   const current = yield* _(orderMessenger.send("order1")(Order.GetOrderStatus_(msg3)))
   yield* _(Effect.logInfo(`Order status is ${JSON.stringify(current)}`))
 
   // buy some items in the warehouse
-  const msg4 = yield* _(Envelope.make({ _tag: "Increase", amount: 12 }))
+  const msg4 = yield* _(Envelope.makeEffect({ _tag: "Increase", amount: 12 }))
   yield* _(inventoryMessenger.sendDiscard("product1")(msg4))
 
   // ship some items
-  const msg5 = yield* _(Envelope.make({ _tag: "ShipProduct", productId: "product1", amount: 10 }))
+  const msg5 = yield* _(Envelope.makeEffect({ _tag: "ShipProduct", productId: "product1", amount: 10 }))
   yield* _(orderMessenger.sendDiscard("order1")(msg5))
 
   yield* _(Effect.sleep(Duration.millis(10000)))

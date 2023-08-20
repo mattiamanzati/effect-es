@@ -9,8 +9,6 @@ import * as Stream from "@effect/stream/Stream"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 import * as Sqlite from "@mattiamanzati/effect-es/Sqlite"
 
-export const EVENTS_FILE = "events.sqlite3"
-
 export function eventStoreSqlite(fileName: string) {
   return pipe(
     Effect.gen(function*(_) {
@@ -30,7 +28,7 @@ export function eventStoreSqlite(fileName: string) {
       `,
           []
         ),
-        Effect.provideSomeLayer(Sqlite.withSqliteConnection(EVENTS_FILE, true))
+        Effect.provideSomeLayer(Sqlite.withSqliteConnection(fileName, true))
       ))
 
       const readJournal = (entityType: string) =>

@@ -4,7 +4,7 @@ import * as ReadonlyArray from "@effect/data/ReadonlyArray"
 import * as Effect from "@effect/io/Effect"
 import * as Schema from "@effect/schema/Schema"
 import * as Message from "@effect/shardcake/Message"
-import * as PoisonPill from "@effect/shardcake/PoisonPill"
+import * as RecipientBehaviour from "@effect/shardcake/RecipientBehaviour"
 import * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Sharding from "@effect/shardcake/Sharding"
 import * as Envelope from "@mattiamanzati/effect-es/Envelope"
@@ -96,37 +96,33 @@ const OrderJournal = EventSourced.make(
   }
 )
 
-export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId, dequeue) =>
-  pipe(
-    PoisonPill.takeOrInterrupt(dequeue),
-    Effect.flatMap((command) =>
-      Envelope.matchTag(command)({
-        PlaceOrder: (msg) =>
-          pipe(
-            Envelope.makeRelated({
-              _tag: "OrderPlaced",
-              orderId,
-              productId: msg.body.productId,
-              amount: msg.body.amount
-            }),
-            Effect.flatMap(OrderJournal.append),
-            Effect.zipLeft(Effect.logInfo("Adding " + msg.body.amount + " of " + msg.body.productId + " to " + orderId))
-          ),
-        ShipProduct: (msg) =>
-          pipe(
-            Envelope.makeRelated({
-              _tag: "ProductShipped",
-              orderId,
-              productId: msg.body.productId,
-              amount: msg.body.amount
-            }),
-            Effect.flatMap(OrderJournal.append),
-            Effect.zipLeft(
-              Effect.logInfo("Shipping " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
-            )
-          ),
-        GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
-      }).pipe(Effect.unified, OrderJournal.commitOrRetry(orderId), Envelope.withOriginatingEnvelope(command))
-    ),
-    Effect.forever
-  ))
+const behaviour = RecipientBehaviour.process(OrderEntityType.schema, (orderId, command) =>
+  Envelope.matchTag(command)({
+    PlaceOrder: (msg) =>
+      pipe(
+        Envelope.makeEffect({
+          _tag: "OrderPlaced",
+          orderId,
+          productId: msg.body.productId,
+          amount: msg.body.amount
+        }),
+        Effect.flatMap(OrderJournal.append),
+        Effect.zipLeft(Effect.logInfo("Adding " + msg.body.amount + " of " + msg.body.productId + " to " + orderId))
+      ),
+    ShipProduct: (msg) =>
+      pipe(
+        Envelope.makeEffect({
+          _tag: "ProductShipped",
+          orderId,
+          productId: msg.body.productId,
+          amount: msg.body.amount
+        }),
+        Effect.flatMap(OrderJournal.append),
+        Effect.zipLeft(
+          Effect.logInfo("Shipping " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
+        )
+      ),
+    GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
+  }).pipe(Effect.unified, OrderJournal.commitOrRetry(orderId), Envelope.withOriginatingEnvelope(command)))
+
+export const registerEntity = Sharding.registerEntity(OrderEntityType, behaviour)
