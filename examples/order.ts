@@ -4,11 +4,12 @@ import * as ReadonlyArray from "@effect/data/ReadonlyArray"
 import * as Effect from "@effect/io/Effect"
 import * as Schema from "@effect/schema/Schema"
 import * as Message from "@effect/shardcake/Message"
-import * as RecipientBehaviour from "@effect/shardcake/RecipientBehaviour"
+import * as PoisonPill from "@effect/shardcake/PoisonPill"
 import * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Sharding from "@effect/shardcake/Sharding"
 import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 import * as EventSourced from "@mattiamanzati/effect-es/EventSourced"
+import * as PersistedMessageQueue from "@mattiamanzati/effect-es/PersistedMessageQueue"
 
 /* Commands */
 const PlaceOrder = Envelope.schema(Schema.struct({
@@ -41,6 +42,7 @@ export const Command = (Schema.union(PlaceOrder, ShipProduct, GetOrderStatus))
 export type Command = Schema.To<typeof Command>
 
 export const OrderEntityType = RecipientType.makeEntityType("Order", Command)
+const OrderMessageQueue = PersistedMessageQueue.make(OrderEntityType, (command) => command.id)
 
 /* Events */
 const OrderPlaced = Envelope.schema(Schema.struct({
@@ -96,33 +98,42 @@ const OrderJournal = EventSourced.make(
   }
 )
 
-const behaviour = RecipientBehaviour.process(OrderEntityType.schema, (orderId, command) =>
-  Envelope.matchTag(command)({
-    PlaceOrder: (msg) =>
-      pipe(
-        Envelope.makeEffect({
-          _tag: "OrderPlaced",
-          orderId,
-          productId: msg.body.productId,
-          amount: msg.body.amount
-        }),
-        Effect.flatMap(OrderJournal.append),
-        Effect.zipLeft(Effect.logInfo("Adding " + msg.body.amount + " of " + msg.body.productId + " to " + orderId))
+export const registerEntity = pipe(
+  Sharding.registerEntity(OrderEntityType, (orderId, dequeue) =>
+    pipe(
+      PoisonPill.takeOrInterrupt(dequeue),
+      Effect.flatMap((command) =>
+        Envelope.matchTag(command)({
+          PlaceOrder: (msg) =>
+            pipe(
+              Envelope.makeEffect({
+                _tag: "OrderPlaced",
+                orderId,
+                productId: msg.body.productId,
+                amount: msg.body.amount
+              }),
+              Effect.flatMap(OrderJournal.append),
+              Effect.zipLeft(
+                Effect.logInfo("Adding " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
+              )
+            ),
+          ShipProduct: (msg) =>
+            pipe(
+              Envelope.makeEffect({
+                _tag: "ProductShipped",
+                orderId,
+                productId: msg.body.productId,
+                amount: msg.body.amount
+              }),
+              Effect.flatMap(OrderJournal.append),
+              Effect.zipLeft(
+                Effect.logInfo("Shipping " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
+              )
+            ),
+          GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
+        }).pipe(Effect.unified, OrderJournal.commitOrRetry(orderId), Envelope.withOriginatingEnvelope(command))
       ),
-    ShipProduct: (msg) =>
-      pipe(
-        Envelope.makeEffect({
-          _tag: "ProductShipped",
-          orderId,
-          productId: msg.body.productId,
-          amount: msg.body.amount
-        }),
-        Effect.flatMap(OrderJournal.append),
-        Effect.zipLeft(
-          Effect.logInfo("Shipping " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
-        )
-      ),
-    GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
-  }).pipe(Effect.unified, OrderJournal.commitOrRetry(orderId), Envelope.withOriginatingEnvelope(command)))
-
-export const registerEntity = Sharding.registerEntity(OrderEntityType, behaviour)
+      Effect.forever
+    )),
+  Effect.provideSomeLayer(OrderMessageQueue)
+)
