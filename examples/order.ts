@@ -103,39 +103,40 @@ export const registerEntity = pipe(
     pipe(
       PoisonPill.takeOrInterrupt(dequeue),
       Effect.flatMap((command) =>
-        Envelope.matchTag(command)({
-          PlaceOrder: (body) =>
-            pipe(
-              Envelope.makeEffect({
-                _tag: "OrderPlaced",
-                orderId,
-                productId: body.body.productId,
-                amount: body.body.amount
-              }),
-              Effect.flatMap(OrderJournal.append),
-              Effect.zipLeft(
-                Effect.logInfo("Adding " + body.body.amount + " of " + body.body.productId + " to " + orderId)
-              )
-            ),
-          ShipProduct: (body) =>
-            pipe(
-              Envelope.makeEffect({
-                _tag: "ProductShipped",
-                orderId,
-                productId: body.body.productId,
-                amount: body.body.amount
-              }),
-              Effect.flatMap(OrderJournal.append),
-              Effect.zipLeft(
-                Effect.logInfo("Shipping " + body.body.amount + " of " + body.body.productId + " to " + orderId)
-              )
-            ),
-          GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
-        }).pipe(
-          Effect.unified,
-          OrderJournal.commitOrRetry(orderId),
-          Effect.zipLeft(PersistedMessageQueue.acknoledge(orderId, command)),
-          Envelope.withOriginatingEnvelope(command)
+        OrderJournal.updateEffect(orderId)(({ append, currentState }) =>
+          Envelope.matchTag(command)({
+            PlaceOrder: (body) =>
+              pipe(
+                Envelope.makeRelatedEffect({
+                  _tag: "OrderPlaced",
+                  orderId,
+                  productId: body.body.productId,
+                  amount: body.body.amount
+                }),
+                Effect.flatMap(append),
+                Effect.zipLeft(
+                  Effect.logInfo("Adding " + body.body.amount + " of " + body.body.productId + " to " + orderId)
+                )
+              ),
+            ShipProduct: (body) =>
+              pipe(
+                Envelope.makeRelatedEffect({
+                  _tag: "ProductShipped",
+                  orderId,
+                  productId: body.body.productId,
+                  amount: body.body.amount
+                }),
+                Effect.flatMap(append),
+                Effect.zipLeft(
+                  Effect.logInfo("Shipping " + body.body.amount + " of " + body.body.productId + " to " + orderId)
+                )
+              ),
+            GetOrderStatus: (msg) => pipe(currentState, Effect.flatMap(msg.replier.reply))
+          }).pipe(
+            Effect.unified,
+            Effect.zipLeft(PersistedMessageQueue.acknoledge(orderId, command)),
+            Envelope.provideRelatedEnvelope(command)
+          )
         )
       ),
       Effect.forever

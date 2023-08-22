@@ -4,36 +4,12 @@ import * as Option from "@effect/data/Option"
 import * as Effect from "@effect/io/Effect"
 import * as Exit from "@effect/io/Exit"
 import * as Layer from "@effect/io/Layer"
-import * as Queue from "@effect/io/Queue"
 import type { Scope } from "@effect/io/Scope"
 import type { ParseError } from "@effect/schema/ParseResult"
 import * as Schema from "@effect/schema/Schema"
 import * as Stream from "@effect/stream/Stream"
-import * as fs from "fs"
+import { getFileChangesStream } from "@mattiamanzati/effect-es/utils"
 import { default as sqlite3 } from "sqlite3"
-
-function getChangesStream(fileName: string) {
-  return pipe(
-    Queue.unbounded<boolean>(),
-    Effect.flatMap((queue) =>
-      pipe(
-        Effect.acquireRelease(
-          Effect.sync(
-            () => [fs.watchFile(fileName, () => Effect.runSync(queue.offer(true))), queue] as const
-          ),
-          ([watcher, queue]) =>
-            Effect.zip(
-              queue.shutdown(),
-              Effect.sync(() => watcher.unref()),
-              { concurrent: true }
-            )
-        ),
-        Effect.map(([_, queue]) => Stream.fromQueue(queue))
-      )
-    ),
-    Stream.unwrapScoped
-  )
-}
 
 export interface SqliteConnection {
   db: sqlite3.Database
@@ -42,7 +18,7 @@ export interface SqliteConnection {
 
 export const SqliteConnection = Tag<SqliteConnection>()
 
-export function withSqliteConnection(fileName: string, writeable: boolean) {
+export function withConnection(fileName: string, writeable: boolean) {
   return pipe(
     Effect.acquireRelease(
       Effect.async<never, never, sqlite3.Database>((resume) => {
@@ -63,36 +39,8 @@ export function withSqliteConnection(fileName: string, writeable: boolean) {
           db.close(() => resume(Effect.succeed(undefined)))
         })
     ),
-    Effect.map((db) => ({ db, changes: getChangesStream(fileName) })),
+    Effect.map((db) => ({ db, changes: getFileChangesStream(fileName) })),
     Layer.scoped(SqliteConnection)
-  )
-}
-
-export function run(sql: string, args: Array<(string | number | null)>) {
-  return pipe(
-    prepare(sql, args),
-    Effect.flatMap((statement) =>
-      Effect.async<never, never, void>((resume) => {
-        statement.run((err) => {
-          if (err) {
-            resume(Effect.die(err))
-          } else {
-            resume(Effect.succeed(undefined))
-          }
-        })
-      })
-    ),
-    Effect.scoped
-  )
-}
-
-export function runInTransaction<R, E, A>(fa: Effect.Effect<R, E, A>) {
-  return pipe(
-    Effect.acquireUseRelease(
-      run("BEGIN", []),
-      () => fa,
-      (_, exit) => Exit.isSuccess(exit) ? run("COMMIT", []) : run("ROLLBACK", [])
-    )
   )
 }
 
@@ -124,6 +72,24 @@ function prepare(
     ))
 }
 
+export function run(sql: string, args: Array<(string | number | null)>) {
+  return pipe(
+    prepare(sql, args),
+    Effect.flatMap((statement) =>
+      Effect.async<never, never, void>((resume) => {
+        statement.run((err) => {
+          if (err) {
+            resume(Effect.die(err))
+          } else {
+            resume(Effect.succeed(undefined))
+          }
+        })
+      })
+    ),
+    Effect.scoped
+  )
+}
+
 export function query<I, A>(
   sql: string,
   args: Array<(string | number | null)>,
@@ -151,8 +117,27 @@ export function query<I, A>(
   )
 }
 
+export interface SqliteTransaction {
+  connection: SqliteConnection
+}
+export const SqliteTransaction = Tag<SqliteTransaction>()
+
+export function commitTransaction<R, E, A>(fa: Effect.Effect<R, E, A>) {
+  return pipe(
+    Effect.acquireUseRelease(
+      run("BEGIN", []),
+      () =>
+        pipe(
+          SqliteConnection,
+          Effect.flatMap((connection) => Effect.provideService(fa, SqliteTransaction, { connection }))
+        ),
+      (_, exit) => Exit.isSuccess(exit) ? run("COMMIT", []) : run("ROLLBACK", [])
+    )
+  )
+}
+
 export const changes = pipe(
   SqliteConnection,
-  Effect.map(({ changes }) => changes),
+  Effect.map((_) => _.changes),
   Stream.unwrap
 )

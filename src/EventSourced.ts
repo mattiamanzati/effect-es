@@ -1,7 +1,6 @@
 /**
  * @since 1.0.0
  */
-import { Tag } from "@effect/data/Context"
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Ref from "@effect/io/Ref/Synchronized"
@@ -11,7 +10,7 @@ import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
 
-interface EventSourcedEvolveArgs<Event, State> {
+export interface EventSourcedEvolveArgs<Event, State> {
   state: State
   event: Event
   entityId: string
@@ -22,11 +21,10 @@ interface Projection<State> {
   state: State
 }
 
-export interface UncommittedEvents {
-  currentProjection: Projection<any>
-  eventsRef: Ref.Synchronized<any>
+export interface EventSourcedArgs<Event, State> {
+  currentState: Effect.Effect<never, never, State>
+  append: (...events: Array<Event>) => Effect.Effect<never, never, void>
 }
-const UncommittedEvents = Tag<UncommittedEvents>()
 
 export function make<I extends JsonData, Event, State>(
   entityType: string,
@@ -34,25 +32,17 @@ export function make<I extends JsonData, Event, State>(
   initialState: (entityId: string) => State,
   evolve: (args: EventSourcedEvolveArgs<Event, State>) => State
 ) {
-  const append = (...newEvents: Array<Event>) =>
-    pipe(
-      UncommittedEvents,
-      Effect.flatMap((_) => Ref.update(_.eventsRef, (events) => events.concat(newEvents)))
-    )
-
-  const currentState = pipe(
-    UncommittedEvents,
-    Effect.map((_) => _.currentProjection.state as State)
-  )
-
-  const commitOrRetry = (entityId: string) =>
-    <R, E, A>(body: Effect.Effect<R | UncommittedEvents, E, A>) =>
+  const updateEffect = (entityId: string) =>
+    <R, E>(
+      fn: (args: EventSourcedArgs<Event, State>) => Effect.Effect<R, E, Array<EventStore.EventStoreUncommittedEvent>>
+    ) =>
       Effect.gen(function*(_) {
         const eventStore = yield* _(EventStore.EventStore)
         const serialization = yield* _(Serialization.Serialization)
         const projectionRef = yield* _(
           Ref.make<Projection<State>>({ version: BigInt(0), state: initialState(entityId) })
         )
+        const eventsRef = yield* _(Ref.make<Array<Event>>([]))
 
         const updateProjection = Ref.updateAndGetEffect(projectionRef, (currentProjection) =>
           pipe(
@@ -68,6 +58,13 @@ export function make<I extends JsonData, Event, State>(
             Effect.orDie
           ))
 
+        const append = (...newEvents: Array<Event>) => Ref.update(eventsRef, (events) => events.concat(newEvents))
+
+        const currentState = pipe(
+          Ref.get(projectionRef),
+          Effect.map((_) => _.state)
+        )
+
         return yield* _(pipe(
           updateProjection,
           Effect.flatMap((currentProjection) =>
@@ -75,29 +72,27 @@ export function make<I extends JsonData, Event, State>(
               Ref.make<Array<Event>>([]),
               Effect.flatMap((eventsRef) =>
                 pipe(
-                  Effect.provideService(body, UncommittedEvents, { currentProjection, eventsRef }),
-                  Effect.tap(() =>
+                  fn({ append, currentState }),
+                  Effect.zipRight(
                     pipe(
                       Ref.get(eventsRef),
                       Effect.flatMap((events) => Effect.forEach(events, (_) => serialization.encode(_, eventsSchema))),
-                      Effect.catchAllCause(Effect.logError),
-                      Effect.flatMap((byteArrays) =>
-                        eventStore.persistEvents(
+                      Effect.map((byteArrays) =>
+                        byteArrays.map((body, idx) => ({
                           entityType,
                           entityId,
-                          currentProjection.version,
-                          byteArrays || []
-                        )
+                          version: currentProjection.version + BigInt(idx + 1),
+                          body
+                        }))
                       )
                     )
                   )
                 )
               )
             )
-          ),
-          Effect.retryWhile(() => false)
+          )
         ))
       })
 
-  return { append, currentState, commitOrRetry }
+  return { updateEffect }
 }

@@ -52,7 +52,7 @@ export const registerSaga = Sharding.registerEntity(
             )
             yield* _(Effect.log("Stock of product " + event.body.productId + " is now " + newStock))
           }
-        }).pipe(Envelope.withOriginatingEnvelope(event), Effect.catchAllCause(Effect.logError), Effect.forever)
+        }).pipe(Envelope.provideRelatedEnvelope(event), Effect.catchAllCause(Effect.logError), Effect.forever)
       )
     )
 ).pipe(Effect.provideSomeLayer(DecreaseStockOnShipmentMessageQueue))

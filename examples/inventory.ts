@@ -64,25 +64,26 @@ export const registerEntity = Sharding.registerEntity(InventoryEntityType, (prod
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
     Effect.flatMap((command) =>
-      Envelope.matchTag(command)({
-        Increase: (body) =>
-          pipe(
-            Envelope.makeEffect({ _tag: "Incremented", productId, amount: body.body.amount }),
-            Effect.flatMap(InventoryJournal.append),
-            Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " increasing by " + body.body.amount))
-          ),
-        Decrease: (body) =>
-          pipe(
-            Envelope.makeEffect({ _tag: "Decremented", productId, amount: body.body.amount }),
-            Effect.flatMap(InventoryJournal.append),
-            Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " decreasing by " + body.body.amount))
-          ),
-        GetCurrentStock: (body) => Effect.flatMap(InventoryJournal.currentState, body.replier.reply)
-      }).pipe(
-        Effect.unified,
-        InventoryJournal.commitOrRetry(productId),
-        Effect.zipLeft(PersistedMessageQueue.acknoledge(productId, command)),
-        Envelope.withOriginatingEnvelope(command)
+      InventoryJournal.updateEffect(productId)(({ append, currentState }) =>
+        Envelope.matchTag(command)({
+          Increase: (body) =>
+            pipe(
+              Envelope.makeRelatedEffect({ _tag: "Incremented", productId, amount: body.body.amount }),
+              Effect.flatMap(append),
+              Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " increasing by " + body.body.amount))
+            ),
+          Decrease: (body) =>
+            pipe(
+              Envelope.makeRelatedEffect({ _tag: "Decremented", productId, amount: body.body.amount }),
+              Effect.flatMap(append),
+              Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " decreasing by " + body.body.amount))
+            ),
+          GetCurrentStock: (body) => Effect.flatMap(currentState, body.replier.reply)
+        }).pipe(
+          Effect.unified,
+          Effect.zipLeft(PersistedMessageQueue.acknoledge(productId, command)),
+          Envelope.provideRelatedEnvelope(command)
+        )
       )
     ),
     Effect.forever

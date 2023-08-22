@@ -28,7 +28,7 @@ export function eventStoreSqlite(fileName: string) {
       `,
           []
         ),
-        Effect.provideSomeLayer(Sqlite.withSqliteConnection(fileName, true))
+        Effect.provideSomeLayer(Sqlite.withConnection(fileName, true))
       ))
 
       const readJournal = (entityType: string) =>
@@ -62,7 +62,7 @@ export function eventStoreSqlite(fileName: string) {
                 Stream.tap(({ id }) => Ref.set(cursorRef, id)),
                 Stream.map((event) => event.body)
               ), { bufferSize: 1, switch: true }),
-            Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName, false)),
+            Stream.provideSomeLayer(Sqlite.withConnection(fileName, false)),
             Stream.orDie
           )
         }).pipe(Stream.unwrap)
@@ -87,7 +87,7 @@ export function eventStoreSqlite(fileName: string) {
             ],
             Schema.struct({ version: Schema.BigintFromString, body: ByteArray.schemaFromString })
           ),
-          Stream.provideSomeLayer(Sqlite.withSqliteConnection(fileName, false)),
+          Stream.provideSomeLayer(Sqlite.withConnection(fileName, false)),
           Stream.orDie
         )
 
@@ -113,9 +113,9 @@ export function eventStoreSqlite(fileName: string) {
                 )
               )
             )),
-          Sqlite.runInTransaction,
+          Sqlite.commitTransaction,
           Effect.zipLeft(Hub.publish(changesHub, true)),
-          Effect.provideSomeLayer(Sqlite.withSqliteConnection(fileName, true)),
+          Effect.provideSomeLayer(Sqlite.withConnection(fileName, true)),
           Effect.orDie,
           Effect.asUnit
         )

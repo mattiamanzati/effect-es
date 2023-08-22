@@ -46,7 +46,7 @@ Effect.gen(function*(_) {
   const msg2 = yield* _(Envelope.makeEffect({ _tag: "PlaceOrder", productId: "product2", amount: 8 }))
   yield* _(orderMessenger.sendDiscard("order1")(msg2))
 
-  // loh current status
+  // log current status
   const msg3 = yield* _(Envelope.makeEffect({ _tag: "GetOrderStatus" }))
   const current = yield* _(orderMessenger.send("order1")(Order.GetOrderStatus_(msg3)))
   yield* _(Effect.logInfo(`Order status is ${JSON.stringify(current)}`))

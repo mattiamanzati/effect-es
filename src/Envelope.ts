@@ -15,14 +15,14 @@ export interface Envelope<A> {
   correlationId: Option.Option<string>
 }
 
-export interface OriginatingEnvelope {
+export interface RelatedEnvelope {
   envelope: Envelope<any>
 }
 
-const OriginatingEnvelope = Tag<OriginatingEnvelope>()
+const RelatedEnvelope = Tag<RelatedEnvelope>()
 
-export function withOriginatingEnvelope(envelope: Envelope<any>){
-  return Effect.provideService(OriginatingEnvelope, { envelope })
+export function provideRelatedEnvelope(envelope: Envelope<any>){
+  return Effect.provideService(RelatedEnvelope, { envelope })
 }
 
 export function schema<I extends JsonData, A>(bodySchema: Schema.Schema<I, A>) {
@@ -78,7 +78,7 @@ export function makeEffect<const A>(body: A) {
   return Effect.gen(function*(_){
     const id = yield* _(makeUUID)
     const nowMillis = yield* _(Clock.currentTimeMillis)
-    const originating = yield* _(Effect.serviceOption(OriginatingEnvelope))
+    const originating = yield* _(Effect.serviceOption(RelatedEnvelope))
 
     const base = make(id, body, new Date(nowMillis))
 
@@ -87,6 +87,13 @@ export function makeEffect<const A>(body: A) {
       onSome: ({ envelope }) => relatedTo(envelope)(base)
     })
   })
+}
+
+export function makeRelatedEffect<const A>(body: A){
+  return Effect.flatMap(
+    RelatedEnvelope,
+    ({ envelope }) => Effect.map(makeEffect(body), relatedTo(envelope))
+  )
 }
 
 export function matchTag<A extends Envelope<{ _tag: PropertyKey }>>(
