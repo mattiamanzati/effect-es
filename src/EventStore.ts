@@ -24,6 +24,13 @@ export const TypeId = "@mattiamanzati/effect-es/EventStore"
  */
 export const EventStore = Tag<EventStore>(TypeId)
 
+export interface EventStoreUncommittedEvent {
+  entityType: string
+  entityId: string
+  version: bigint
+  body: ByteArray.ByteArray
+}
+
 /**
  * @since 1.0.0
  * @category models
@@ -44,23 +51,6 @@ export interface EventStore {
     entityId: string,
     fromVersion: bigint
   ): Stream.Stream<never, never, { version: bigint; body: ByteArray.ByteArray }>
-
-  /**
-   * Persists a list of events in a transaction, ensuring sequence is mantained
-   */
-  persistEvents(
-    entityType: string,
-    entityId: string,
-    currentVersion: bigint,
-    events: Iterable<ByteArray.ByteArray>
-  ): Effect.Effect<never, never, void>
-}
-
-type InMemoryEntry = {
-  entityType: string
-  entityId: string
-  version: bigint
-  body: ByteArray.ByteArray
 }
 
 export function readJournalAndDecode<I extends JsonData, A>(entityType: string, schema: Schema.Schema<I, A>) {
@@ -74,7 +64,7 @@ export function readJournalAndDecode<I extends JsonData, A>(entityType: string, 
 
 export const inMemory = pipe(
   Effect.gen(function*(_) {
-    const memoryRef = yield* _(Ref.make<Array<InMemoryEntry>>([]))
+    const memoryRef = yield* _(Ref.make<Array<EventStoreUncommittedEvent>>([]))
 
     const readJournal = (entityType: string) =>
       pipe(
