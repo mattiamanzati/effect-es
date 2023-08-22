@@ -78,7 +78,12 @@ export const registerEntity = Sharding.registerEntity(InventoryEntityType, (prod
             Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " decreasing by " + body.body.amount))
           ),
         GetCurrentStock: (body) => Effect.flatMap(InventoryJournal.currentState, body.replier.reply)
-      }).pipe(Effect.unified, InventoryJournal.commitOrRetry(productId), Envelope.withOriginatingEnvelope(command))
+      }).pipe(
+        Effect.unified,
+        InventoryJournal.commitOrRetry(productId),
+        Effect.zipLeft(PersistedMessageQueue.acknoledge(productId, command)),
+        Envelope.withOriginatingEnvelope(command)
+      )
     ),
     Effect.forever
   )).pipe(Effect.provideSomeLayer(InventoryMessageQueue))

@@ -104,34 +104,39 @@ export const registerEntity = pipe(
       PoisonPill.takeOrInterrupt(dequeue),
       Effect.flatMap((command) =>
         Envelope.matchTag(command)({
-          PlaceOrder: (msg) =>
+          PlaceOrder: (body) =>
             pipe(
               Envelope.makeEffect({
                 _tag: "OrderPlaced",
                 orderId,
-                productId: msg.body.productId,
-                amount: msg.body.amount
+                productId: body.body.productId,
+                amount: body.body.amount
               }),
               Effect.flatMap(OrderJournal.append),
               Effect.zipLeft(
-                Effect.logInfo("Adding " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
+                Effect.logInfo("Adding " + body.body.amount + " of " + body.body.productId + " to " + orderId)
               )
             ),
-          ShipProduct: (msg) =>
+          ShipProduct: (body) =>
             pipe(
               Envelope.makeEffect({
                 _tag: "ProductShipped",
                 orderId,
-                productId: msg.body.productId,
-                amount: msg.body.amount
+                productId: body.body.productId,
+                amount: body.body.amount
               }),
               Effect.flatMap(OrderJournal.append),
               Effect.zipLeft(
-                Effect.logInfo("Shipping " + msg.body.amount + " of " + msg.body.productId + " to " + orderId)
+                Effect.logInfo("Shipping " + body.body.amount + " of " + body.body.productId + " to " + orderId)
               )
             ),
           GetOrderStatus: (msg) => pipe(OrderJournal.currentState, Effect.flatMap(msg.replier.reply))
-        }).pipe(Effect.unified, OrderJournal.commitOrRetry(orderId), Envelope.withOriginatingEnvelope(command))
+        }).pipe(
+          Effect.unified,
+          OrderJournal.commitOrRetry(orderId),
+          Effect.zipLeft(PersistedMessageQueue.acknoledge(orderId, command)),
+          Envelope.withOriginatingEnvelope(command)
+        )
       ),
       Effect.forever
     )),
