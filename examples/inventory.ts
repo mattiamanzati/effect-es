@@ -80,8 +80,7 @@ const handleCommand = (productId: string, command: Command) =>
     }).pipe(Effect.unified)
   }).pipe(
     Envelope.provideRelatedEnvelope(command),
-    Sqlite.commitTransaction,
-    Effect.provideSomeLayer(EventStoreSqlite.sqlLite)
+    Sqlite.commitTransaction
   )
 
 export const registerEntity = Sharding.registerEntity(InventoryEntityType, (productId, dequeue) =>

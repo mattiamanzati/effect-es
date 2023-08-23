@@ -3,12 +3,11 @@
  */
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
-import type * as Layer from "@effect/io/Layer"
 import * as Ref from "@effect/io/Ref/Synchronized"
 import type * as Schema from "@effect/schema/Schema"
 import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
-import * as EventStore from "@mattiamanzati/effect-es/EventStore"
+import type * as EventStore from "@mattiamanzati/effect-es/EventStore"
 
 export interface EventSourcedEvolveArgs<Event, State> {
   state: State
@@ -31,21 +30,19 @@ export function make<I, Event, State, R, E>(
   eventsSchema: Schema.Schema<I, Event>,
   initialState: (entityId: string) => State,
   evolve: (args: EventSourcedEvolveArgs<Event, State>) => State,
-  eventStoreLayer: Layer.Layer<R, E, EventStore.EventStore>
+  eventStore: EventStore.EventStore<R, E>
 ) {
   const readJournal = Effect.gen(function*(_) {
-    const eventStore = yield* _(EventStore.EventStore)
     const serialization = yield* _(Serialization.Serialization)
 
     return pipe(eventStore.readJournal(entityType), Stream.mapEffect((_) => serialization.decode(_, eventsSchema)))
-  }).pipe(Stream.unwrap, Stream.orDie, Stream.provideSomeLayer(eventStoreLayer))
+  }).pipe(Stream.unwrap)
 
   const updateEffect = (entityId: string) =>
     <R, E>(
       fn: (args: EventSourcedArgs<Event, State>) => Effect.Effect<R, E, void>
     ) =>
       Effect.gen(function*(_) {
-        const eventStore = yield* _(EventStore.EventStore)
         const serialization = yield* _(Serialization.Serialization)
         const projectionRef = yield* _(
           Ref.make<Projection<State>>({ version: BigInt(0), state: initialState(entityId) })
@@ -62,8 +59,7 @@ export function make<I, Event, State, R, E>(
                   serialization.decode(body, eventsSchema),
                   (event) => ({ version, state: evolve({ ...p, entityId, event }) })
                 )
-            ),
-            Effect.orDie
+            )
           ))
 
         const append = (...newEvents: Array<Event>) => Ref.update(eventsRef, (events) => events.concat(newEvents))
@@ -95,7 +91,7 @@ export function make<I, Event, State, R, E>(
             )
           )
         ))
-      }).pipe(Effect.provideSomeLayer(eventStoreLayer))
+      })
 
   return { updateEffect, readJournal }
 }
