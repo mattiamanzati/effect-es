@@ -9,7 +9,7 @@ export function createSagaRouter<Msg>(
   sagaRecipientType: RecipientType.EntityType<Msg>,
   eventToSagaId: (event: Msg) => Option.Option<string>
 ) {
-  return <R>(stream: Stream.Stream<R, never, Msg>) => {
+  return <R, E>(stream: Stream.Stream<R, E, Msg>) => {
     const behaviour = pipe(
       stream,
       Stream.mapEffect((event) =>

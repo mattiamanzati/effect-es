@@ -3,9 +3,9 @@
  */
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
+import type * as Layer from "@effect/io/Layer"
 import * as Ref from "@effect/io/Ref/Synchronized"
 import type * as Schema from "@effect/schema/Schema"
-import type { JsonData } from "@effect/shardcake/JsonData"
 import * as Serialization from "@effect/shardcake/Serialization"
 import * as Stream from "@effect/stream/Stream"
 import * as EventStore from "@mattiamanzati/effect-es/EventStore"
@@ -26,15 +26,23 @@ export interface EventSourcedArgs<Event, State> {
   append: (...events: Array<Event>) => Effect.Effect<never, never, void>
 }
 
-export function make<I extends JsonData, Event, State>(
+export function make<I, Event, State, R, E>(
   entityType: string,
   eventsSchema: Schema.Schema<I, Event>,
   initialState: (entityId: string) => State,
-  evolve: (args: EventSourcedEvolveArgs<Event, State>) => State
+  evolve: (args: EventSourcedEvolveArgs<Event, State>) => State,
+  eventStoreLayer: Layer.Layer<R, E, EventStore.EventStore>
 ) {
+  const readJournal = Effect.gen(function*(_) {
+    const eventStore = yield* _(EventStore.EventStore)
+    const serialization = yield* _(Serialization.Serialization)
+
+    return pipe(eventStore.readJournal(entityType), Stream.mapEffect((_) => serialization.decode(_, eventsSchema)))
+  }).pipe(Stream.unwrap, Stream.orDie, Stream.provideSomeLayer(eventStoreLayer))
+
   const updateEffect = (entityId: string) =>
     <R, E>(
-      fn: (args: EventSourcedArgs<Event, State>) => Effect.Effect<R, E, Array<EventStore.EventStoreUncommittedEvent>>
+      fn: (args: EventSourcedArgs<Event, State>) => Effect.Effect<R, E, void>
     ) =>
       Effect.gen(function*(_) {
         const eventStore = yield* _(EventStore.EventStore)
@@ -69,30 +77,25 @@ export function make<I extends JsonData, Event, State>(
           updateProjection,
           Effect.flatMap((currentProjection) =>
             pipe(
-              Ref.make<Array<Event>>([]),
-              Effect.flatMap((eventsRef) =>
+              fn({ append, currentState }),
+              Effect.zipRight(
                 pipe(
-                  fn({ append, currentState }),
-                  Effect.zipRight(
-                    pipe(
-                      Ref.get(eventsRef),
-                      Effect.flatMap((events) => Effect.forEach(events, (_) => serialization.encode(_, eventsSchema))),
-                      Effect.map((byteArrays) =>
-                        byteArrays.map((body, idx) => ({
-                          entityType,
-                          entityId,
-                          version: currentProjection.version + BigInt(idx + 1),
-                          body
-                        }))
-                      )
-                    )
+                  Ref.get(eventsRef),
+                  Effect.flatMap((events) => Effect.forEach(events, (_) => serialization.encode(_, eventsSchema))),
+                  Effect.map((byteArrays) =>
+                    byteArrays.map((body, idx) => ({
+                      entityType,
+                      entityId,
+                      version: currentProjection.version + BigInt(idx + 1),
+                      body
+                    }))
                   )
                 )
               )
             )
           )
         ))
-      })
+      }).pipe(Effect.provideSomeLayer(eventStoreLayer))
 
-  return { updateEffect }
+  return { updateEffect, readJournal }
 }

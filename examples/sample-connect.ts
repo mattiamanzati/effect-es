@@ -13,7 +13,7 @@ import * as ShardingImpl from "@effect/shardcake/ShardingImpl"
 import * as ShardManagerClient from "@effect/shardcake/ShardManagerClient"
 import * as Storage from "@effect/shardcake/Storage"
 import * as Envelope from "@mattiamanzati/effect-es/Envelope"
-import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
+import * as Sqlite from "@mattiamanzati/effect-es/Sqlite"
 import * as DecreaseStockOnShipment from "./decrease-stock-on-shipment-saga"
 import * as Inventory from "./inventory"
 import * as Order from "./order"
@@ -62,8 +62,8 @@ Effect.gen(function*(_) {
   yield* _(Effect.sleep(Duration.millis(10000)))
 }).pipe(
   Effect.provideSomeLayer(inMemorySharding),
-  Effect.provideSomeLayer(EventStoreSqlite.eventStoreSqlite("events.sqlite3")),
   Effect.provideSomeLayer(Serialization.json),
+  Effect.provideSomeLayer(Sqlite.withConnection("events.sqlite3", true)),
   Effect.scoped,
   Logger.withMinimumLogLevel(LogLevel.Info),
   Effect.catchAllCause(Effect.logError),

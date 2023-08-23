@@ -18,7 +18,7 @@ specifiers:
   '@effect/platform': ^0.13.2
   '@effect/platform-node': ^0.13.2
   '@effect/schema': ^0.33.1
-  '@effect/shardcake': https://gitpkg.now.sh/mattiamanzati/shardcake/dist?b82364ee3286b53abcf77fe4ba65a7e4e1e38c4b
+  '@effect/shardcake': https://gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c
   '@effect/stream': ^0.34.0
   '@repo-tooling/eslint-plugin-dprint': ^0.0.4
   '@rollup/pluginutils': ^5.0.2
@@ -66,7 +66,7 @@ dependencies:
   '@effect/platform': 0.13.2_s2jxo26m2g6ktl6uid2rjnf2na
   '@effect/platform-node': 0.13.2_gx7zrijuzg33iwlhrnuhqwhhui
   '@effect/schema': 0.33.1_sws5luwqkicizfmcvy7d4tjyca
-  '@effect/shardcake': '@gitpkg.now.sh/mattiamanzati/shardcake/dist?b82364ee3286b53abcf77fe4ba65a7e4e1e38c4b_no53iq4ladxqpkjkqodufa2oui'
+  '@effect/shardcake': '@gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c_no53iq4ladxqpkjkqodufa2oui'
   '@effect/stream': 0.34.0_sws5luwqkicizfmcvy7d4tjyca
   node-fetch: 2.6.12
   sqlite3: 5.1.6
@@ -8638,9 +8638,9 @@ packages:
     engines: {node: '>=12.20'}
     dev: true
 
-  '@gitpkg.now.sh/mattiamanzati/shardcake/dist?b82364ee3286b53abcf77fe4ba65a7e4e1e38c4b_no53iq4ladxqpkjkqodufa2oui':
-    resolution: {tarball: https://gitpkg.now.sh/mattiamanzati/shardcake/dist?b82364ee3286b53abcf77fe4ba65a7e4e1e38c4b}
-    id: '@gitpkg.now.sh/mattiamanzati/shardcake/dist?b82364ee3286b53abcf77fe4ba65a7e4e1e38c4b'
+  '@gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c_no53iq4ladxqpkjkqodufa2oui':
+    resolution: {tarball: https://gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c}
+    id: '@gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c'
     name: '@effect/shardcake'
     version: 0.20.2
     peerDependencies:

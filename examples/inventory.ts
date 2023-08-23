@@ -7,7 +7,8 @@ import * as RecipientType from "@effect/shardcake/RecipientType"
 import * as Sharding from "@effect/shardcake/Sharding"
 import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 import * as EventSourced from "@mattiamanzati/effect-es/EventSourced"
-import * as PersistedMessageQueue from "@mattiamanzati/effect-es/PersistedMessageQueue"
+import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
+import * as Sqlite from "@mattiamanzati/effect-es/Sqlite"
 
 /* Commands */
 const Increase = Envelope.schema(Schema.struct({
@@ -28,7 +29,6 @@ export const Command = Schema.union(Increase, Decrease, GetCurrentStock_)
 export type Command = Schema.To<typeof Command>
 
 export const InventoryEntityType = RecipientType.makeEntityType("Inventory", Command)
-const InventoryMessageQueue = PersistedMessageQueue.make(InventoryEntityType, (message) => message.id)
 
 /* Events */
 const Incremented = Envelope.schema(Schema.struct({
@@ -45,7 +45,7 @@ const Decremented = Envelope.schema(Schema.struct({
 
 export const Event = Schema.union(Incremented, Decremented)
 
-const InventoryJournal = EventSourced.make(
+export const InventoryJournal = EventSourced.make(
   InventoryEntityType.name,
   Event,
   () => 0,
@@ -57,34 +57,37 @@ const InventoryJournal = EventSourced.make(
       case "Decremented":
         return state - body.amount
     }
-  }
+  },
+  EventStoreSqlite.sqlLite
 )
+
+const handleCommand = (productId: string, command: Command) =>
+  InventoryJournal.updateEffect(productId)(({ append, currentState }) => {
+    return Envelope.matchTag(command)({
+      Increase: (body) =>
+        pipe(
+          Envelope.makeRelatedEffect({ _tag: "Incremented", productId, amount: body.body.amount }),
+          Effect.flatMap(append),
+          Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " increasing by " + body.body.amount))
+        ),
+      Decrease: (body) =>
+        pipe(
+          Envelope.makeRelatedEffect({ _tag: "Decremented", productId, amount: body.body.amount }),
+          Effect.flatMap(append),
+          Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " decreasing by " + body.body.amount))
+        ),
+      GetCurrentStock: (body) => Effect.flatMap(currentState, body.replier.reply)
+    }).pipe(Effect.unified)
+  }).pipe(
+    Envelope.provideRelatedEnvelope(command),
+    Sqlite.commitTransaction,
+    Effect.provideSomeLayer(EventStoreSqlite.sqlLite)
+  )
 
 export const registerEntity = Sharding.registerEntity(InventoryEntityType, (productId, dequeue) =>
   pipe(
     PoisonPill.takeOrInterrupt(dequeue),
-    Effect.flatMap((command) =>
-      InventoryJournal.updateEffect(productId)(({ append, currentState }) =>
-        Envelope.matchTag(command)({
-          Increase: (body) =>
-            pipe(
-              Envelope.makeRelatedEffect({ _tag: "Incremented", productId, amount: body.body.amount }),
-              Effect.flatMap(append),
-              Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " increasing by " + body.body.amount))
-            ),
-          Decrease: (body) =>
-            pipe(
-              Envelope.makeRelatedEffect({ _tag: "Decremented", productId, amount: body.body.amount }),
-              Effect.flatMap(append),
-              Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " decreasing by " + body.body.amount))
-            ),
-          GetCurrentStock: (body) => Effect.flatMap(currentState, body.replier.reply)
-        }).pipe(
-          Effect.unified,
-          Effect.zipLeft(PersistedMessageQueue.acknoledge(productId, command)),
-          Envelope.provideRelatedEnvelope(command)
-        )
-      )
-    ),
-    Effect.forever
-  )).pipe(Effect.provideSomeLayer(InventoryMessageQueue))
+    Effect.flatMap((command) => handleCommand(productId, command)),
+    Effect.forever,
+    Effect.orDie
+  ))
