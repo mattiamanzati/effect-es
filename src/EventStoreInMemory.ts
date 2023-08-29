@@ -6,7 +6,7 @@ import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Layer from "@effect/io/Layer"
 import * as Ref from "@effect/io/Ref"
-import type * as ByteArray from "@effect/shardcake/ByteArray"
+import type * as ByteArray from "@effect/sharding/ByteArray"
 import * as Stream from "@effect/stream/Stream"
 import type * as EventStore from "@mattiamanzati/effect-es/EventStore"
 

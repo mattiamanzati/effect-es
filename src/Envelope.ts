@@ -3,7 +3,6 @@ import * as Option from "@effect/data/Option"
 import * as Clock from "@effect/io/Clock"
 import * as Effect from "@effect/io/Effect"
 import * as Schema from "@effect/schema/Schema"
-import type { JsonData } from "@effect/shardcake/JsonData"
 import * as Random from "@effect/io/Random"
 import * as DeterministicRandom from "@effect/data/DeterministicRandom"
 
@@ -25,7 +24,7 @@ export function provideRelatedEnvelope(envelope: Envelope<any>){
   return Effect.provideService(RelatedEnvelope, { envelope })
 }
 
-export function schema<I extends JsonData, A>(bodySchema: Schema.Schema<I, A>) {
+export function schema<I, A>(bodySchema: Schema.Schema<I, A>) {
   return Schema.struct({
     id: Schema.string,
     body: bodySchema,

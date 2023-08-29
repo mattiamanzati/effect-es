@@ -1,8 +1,8 @@
 import { pipe } from "@effect/data/Function"
 import * as Option from "@effect/data/Option"
 import * as Effect from "@effect/io/Effect"
-import type * as RecipientType from "@effect/shardcake/RecipientType"
-import * as Sharding from "@effect/shardcake/Sharding"
+import type * as RecipientType from "@effect/sharding/RecipientType"
+import * as Sharding from "@effect/sharding/Sharding"
 import * as Stream from "@effect/stream/Stream"
 
 export function createSagaRouter<Msg>(

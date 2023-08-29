@@ -1,10 +1,11 @@
 import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Schema from "@effect/schema/Schema"
-import * as Message from "@effect/shardcake/Message"
-import * as PoisonPill from "@effect/shardcake/PoisonPill"
-import * as RecipientType from "@effect/shardcake/RecipientType"
-import * as Sharding from "@effect/shardcake/Sharding"
+import * as Message from "@effect/sharding/Message"
+import * as PoisonPill from "@effect/sharding/PoisonPill"
+import type { RecipientContext } from "@effect/sharding/RecipientBehaviour"
+import * as RecipientType from "@effect/sharding/RecipientType"
+import * as Sharding from "@effect/sharding/Sharding"
 import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 import * as EventSourced from "@mattiamanzati/effect-es/EventSourced"
 import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
@@ -61,7 +62,7 @@ export const InventoryJournal = EventSourced.make(
   EventStoreSqlite.sqlLite
 )
 
-const handleCommand = (productId: string, command: Command) =>
+const handleCommand = ({ entityId: productId, reply }: RecipientContext<Command>, command: Command) =>
   InventoryJournal.updateEffect(productId)(({ append, currentState }) => {
     return Envelope.matchTag(command)({
       Increase: (body) =>
@@ -76,17 +77,17 @@ const handleCommand = (productId: string, command: Command) =>
           Effect.flatMap(append),
           Effect.zipLeft(Effect.logInfo("Inventory of " + productId + " decreasing by " + body.body.amount))
         ),
-      GetCurrentStock: (body) => Effect.flatMap(currentState, body.replier.reply)
+      GetCurrentStock: (body) => Effect.flatMap(currentState, (_) => reply(body, _))
     }).pipe(Effect.unified)
   }).pipe(
     Envelope.provideRelatedEnvelope(command),
     Sqlite.commitTransaction
   )
 
-export const registerEntity = Sharding.registerEntity(InventoryEntityType, (productId, dequeue) =>
+export const registerEntity = Sharding.registerEntity(InventoryEntityType, (_) =>
   pipe(
-    PoisonPill.takeOrInterrupt(dequeue),
-    Effect.flatMap((command) => handleCommand(productId, command)),
+    PoisonPill.takeOrInterrupt(_.dequeue),
+    Effect.flatMap((command) => handleCommand(_, command)),
     Effect.forever,
     Effect.orDie
   ))

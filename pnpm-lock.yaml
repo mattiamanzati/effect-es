@@ -18,7 +18,7 @@ specifiers:
   '@effect/platform': ^0.13.2
   '@effect/platform-node': ^0.13.2
   '@effect/schema': ^0.33.1
-  '@effect/shardcake': https://gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c
+  '@effect/sharding': https://gitpkg.now.sh/mattiamanzati/shardcake/packages/sharding/dist?c38d746bf642bcaa1852c04540037f0a2e11242f
   '@effect/stream': ^0.34.0
   '@repo-tooling/eslint-plugin-dprint': ^0.0.4
   '@rollup/pluginutils': ^5.0.2
@@ -66,7 +66,7 @@ dependencies:
   '@effect/platform': 0.13.2_s2jxo26m2g6ktl6uid2rjnf2na
   '@effect/platform-node': 0.13.2_gx7zrijuzg33iwlhrnuhqwhhui
   '@effect/schema': 0.33.1_sws5luwqkicizfmcvy7d4tjyca
-  '@effect/shardcake': '@gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c_no53iq4ladxqpkjkqodufa2oui'
+  '@effect/sharding': '@gitpkg.now.sh/mattiamanzati/shardcake/packages/sharding/dist?c38d746bf642bcaa1852c04540037f0a2e11242f_s2jxo26m2g6ktl6uid2rjnf2na'
   '@effect/stream': 0.34.0_sws5luwqkicizfmcvy7d4tjyca
   node-fetch: 2.6.12
   sqlite3: 5.1.6
@@ -5777,6 +5777,12 @@ packages:
       mime-db: 1.52.0
     dev: true
 
+  /mime/3.0.0:
+    resolution: {integrity: sha512-jSCU7/VB1loIWBZe14aEYHU/+1UMEHoaO7qxCOVJOw9GgH72VAWppxNcjU+x9a2k3GSIBXNKxXQFqRvvZ7vr3A==}
+    engines: {node: '>=10.0.0'}
+    hasBin: true
+    dev: false
+
   /mimic-fn/2.1.0:
     resolution: {integrity: sha512-OqbOk5oEQeAZ8WXWydlu9HJjz9WVdEIvamMCcXmuqUYjTknH/sqsWvhQ3vgwKFRR1HpjvNBKQ37nbJgYzGqGcg==}
     engines: {node: '>=6'}
@@ -8638,27 +8644,24 @@ packages:
     engines: {node: '>=12.20'}
     dev: true
 
-  '@gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c_no53iq4ladxqpkjkqodufa2oui':
-    resolution: {tarball: https://gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c}
-    id: '@gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c'
-    name: '@effect/shardcake'
-    version: 0.20.2
+  '@gitpkg.now.sh/mattiamanzati/shardcake/packages/sharding/dist?c38d746bf642bcaa1852c04540037f0a2e11242f_s2jxo26m2g6ktl6uid2rjnf2na':
+    resolution: {tarball: https://gitpkg.now.sh/mattiamanzati/shardcake/packages/sharding/dist?c38d746bf642bcaa1852c04540037f0a2e11242f}
+    id: '@gitpkg.now.sh/mattiamanzati/shardcake/packages/sharding/dist?c38d746bf642bcaa1852c04540037f0a2e11242f'
+    name: '@effect/sharding'
+    version: 0.13.9
     peerDependencies:
       '@effect/data': ^0.17.5
       '@effect/io': ^0.38.2
-      '@effect/platform': ^0.13.2
-      '@effect/platform-node': ^0.13.2
       '@effect/schema': ^0.33.1
       '@effect/stream': ^0.34.0
-      node-fetch: '2'
     dependencies:
       '@effect/data': 0.17.5
       '@effect/io': 0.38.2_@effect+data@0.17.5
-      '@effect/platform': 0.13.2_s2jxo26m2g6ktl6uid2rjnf2na
-      '@effect/platform-node': 0.13.2_gx7zrijuzg33iwlhrnuhqwhhui
       '@effect/schema': 0.33.1_sws5luwqkicizfmcvy7d4tjyca
       '@effect/stream': 0.34.0_sws5luwqkicizfmcvy7d4tjyca
-      node-fetch: 2.6.12
+      find-my-way: 7.6.2
+      mime: 3.0.0
+      path-browserify: 1.0.1
     dev: false
 
 publishDirectory: dist

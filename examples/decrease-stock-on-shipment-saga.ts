@@ -2,9 +2,9 @@ import { pipe } from "@effect/data/Function"
 import * as Option from "@effect/data/Option"
 import * as Effect from "@effect/io/Effect"
 import * as Schema from "@effect/schema/Schema"
-import * as PoisonPill from "@effect/shardcake/PoisonPill"
-import * as RecipientType from "@effect/shardcake/RecipientType"
-import * as Sharding from "@effect/shardcake/Sharding"
+import * as PoisonPill from "@effect/sharding/PoisonPill"
+import * as RecipientType from "@effect/sharding/RecipientType"
+import * as Sharding from "@effect/sharding/Sharding"
 import * as Stream from "@effect/stream/Stream"
 import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 import * as Saga from "@mattiamanzati/effect-es/Saga"
@@ -26,7 +26,7 @@ export const routeEvents = Saga.createSagaRouter(
 
 export const registerSaga = Sharding.registerEntity(
   DecreaseStockOnShipmentType,
-  (sagaId, dequeue) =>
+  ({ dequeue }) =>
     pipe(
       PoisonPill.takeOrInterrupt(dequeue),
       Effect.flatMap((event) =>

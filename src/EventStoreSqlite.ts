@@ -2,7 +2,7 @@ import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Ref from "@effect/io/Ref"
 import * as Schema from "@effect/schema/Schema"
-import * as ByteArray from "@effect/shardcake/ByteArray"
+import * as ByteArray from "@effect/sharding/ByteArray"
 import * as Stream from "@effect/stream/Stream"
 import * as Sqlite from "@mattiamanzati/effect-es/Sqlite"
 

@@ -1,7 +1,7 @@
 /**
  * @since 1.0.0
  */
-import type * as ByteArray from "@effect/shardcake/ByteArray"
+import type * as ByteArray from "@effect/sharding/ByteArray"
 import type * as Stream from "@effect/stream/Stream"
 
 /**

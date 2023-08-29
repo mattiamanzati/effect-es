@@ -3,10 +3,11 @@ import * as Option from "@effect/data/Option"
 import * as ReadonlyArray from "@effect/data/ReadonlyArray"
 import * as Effect from "@effect/io/Effect"
 import * as Schema from "@effect/schema/Schema"
-import * as Message from "@effect/shardcake/Message"
-import * as PoisonPill from "@effect/shardcake/PoisonPill"
-import * as RecipientType from "@effect/shardcake/RecipientType"
-import * as Sharding from "@effect/shardcake/Sharding"
+import * as Message from "@effect/sharding/Message"
+import * as PoisonPill from "@effect/sharding/PoisonPill"
+import type { RecipientContext } from "@effect/sharding/RecipientBehaviour"
+import * as RecipientType from "@effect/sharding/RecipientType"
+import * as Sharding from "@effect/sharding/Sharding"
 import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 import * as EventSourced from "@mattiamanzati/effect-es/EventSourced"
 import * as EventStoreSqlite from "@mattiamanzati/effect-es/EventStoreSqlite"
@@ -99,7 +100,7 @@ export const OrderJournal = EventSourced.make(
   EventStoreSqlite.sqlLite
 )
 
-const handleCommand = (orderId: string, command: Command) =>
+const handleCommand = ({ entityId: orderId, reply }: RecipientContext<Command>, command: Command) =>
   OrderJournal.updateEffect(orderId)(({ append, currentState }) =>
     Envelope.matchTag(command)({
       PlaceOrder: (body) =>
@@ -128,7 +129,7 @@ const handleCommand = (orderId: string, command: Command) =>
             Effect.logInfo("Shipping " + body.body.amount + " of " + body.body.productId + " to " + orderId)
           )
         ),
-      GetOrderStatus: (msg) => pipe(currentState, Effect.flatMap(msg.replier.reply))
+      GetOrderStatus: (msg) => pipe(currentState, Effect.flatMap((_) => reply(msg, _)))
     }).pipe(
       Effect.unified
     )
@@ -137,10 +138,10 @@ const handleCommand = (orderId: string, command: Command) =>
     Sqlite.commitTransaction
   )
 
-export const registerEntity = Sharding.registerEntity(OrderEntityType, (orderId, dequeue) =>
+export const registerEntity = Sharding.registerEntity(OrderEntityType, (ctx) =>
   pipe(
-    PoisonPill.takeOrInterrupt(dequeue),
-    Effect.flatMap((command) => handleCommand(orderId, command)),
+    PoisonPill.takeOrInterrupt(ctx.dequeue),
+    Effect.flatMap((command) => handleCommand(ctx, command)),
     Effect.forever,
     Effect.orDie
   ))

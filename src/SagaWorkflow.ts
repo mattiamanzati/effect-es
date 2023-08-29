@@ -2,11 +2,11 @@
 // import { pipe } from "@effect/data/Function"
 // import * as Effect from "@effect/io/Effect"
 // import * as Schema from "@effect/schema/Schema"
-// import type { JsonData } from "@effect/shardcake/JsonData"
-// import type * as Message from "@effect/shardcake/Message"
-// import type * as RecipientType from "@effect/shardcake/RecipientType"
-// import * as ReplyId from "@effect/shardcake/ReplyId"
-// import * as Sharding from "@effect/shardcake/Sharding"
+// import type { JsonData } from "@effect/sharding/JsonData"
+// import type * as Message from "@effect/sharding/Message"
+// import type * as RecipientType from "@effect/sharding/RecipientType"
+// import * as ReplyId from "@effect/sharding/ReplyId"
+// import * as Sharding from "@effect/sharding/Sharding"
 // import * as Envelope from "@mattiamanzati/effect-es/Envelope"
 
 // /** @internal */

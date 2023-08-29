@@ -5,7 +5,7 @@ import { pipe } from "@effect/data/Function"
 import * as Effect from "@effect/io/Effect"
 import * as Ref from "@effect/io/Ref/Synchronized"
 import type * as Schema from "@effect/schema/Schema"
-import * as Serialization from "@effect/shardcake/Serialization"
+import * as Serialization from "@effect/sharding/Serialization"
 import * as Stream from "@effect/stream/Stream"
 import type * as EventStore from "@mattiamanzati/effect-es/EventStore"
 

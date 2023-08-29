@@ -117,7 +117,7 @@
     "@effect/stream": "^0.34.0",
     "@effect/platform": "^0.13.2",
     "@effect/platform-node": "^0.13.2",
-    "@effect/shardcake": "https://gitpkg.now.sh/mattiamanzati/shardcake/dist?15e4d317f3ccb045067c0d06e7e45c3fd668553c",
+    "@effect/sharding": "https://gitpkg.now.sh/mattiamanzati/shardcake/packages/sharding/dist?c38d746bf642bcaa1852c04540037f0a2e11242f",
     "sqlite3": "^5.1.6",
     "node-fetch": "2"
   },
